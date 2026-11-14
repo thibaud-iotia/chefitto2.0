@@ -1,0 +1,138 @@
+import type { FridgeItem, ImportTemplate, RecipeDraft } from './types';
+
+/** Recettes de départ (reprises de la maquette), insérées au premier login. */
+export const SEED_RECIPES: RecipeDraft[] = [
+  {
+    name: 'Veggie tomato mix',
+    category: 'Entrées',
+    price: '1 900',
+    timeMin: 25,
+    level: 'Facile',
+    description: "Tomates cerises, basilic et oignon rouge relevés d'un filet d'huile d'olive.",
+    ingredients: ['Tomate', 'Basilic', 'Oignon', "Huile d'olive", 'Olives'],
+    steps: [
+      "Coupez les tomates en deux et émincez l'oignon.",
+      'Mélangez avec le basilic et les olives.',
+      "Assaisonnez d'huile d'olive, sel et poivre.",
+      'Servez frais.',
+    ],
+  },
+  {
+    name: 'Spicy fish sauce',
+    category: 'Plats',
+    price: '2 300',
+    timeMin: 40,
+    level: 'Moyen',
+    description: 'Filet de poisson mijoté dans une sauce tomate pimentée.',
+    ingredients: ['Poisson', 'Tomate', 'Piment', 'Oignon', "Huile d'olive"],
+    steps: [
+      "Faites revenir l'oignon et le piment.",
+      'Ajoutez les tomates et laissez réduire 10 minutes.',
+      'Posez le poisson et cuisez 15 minutes à feu doux.',
+      "Rectifiez l'assaisonnement et servez.",
+    ],
+  },
+  {
+    name: 'Salade de légumes',
+    category: 'Entrées',
+    price: '1 500',
+    timeMin: 15,
+    level: 'Facile',
+    description: 'Légumes croquants de saison, vinaigrette citronnée.',
+    ingredients: ['Tomate', 'Courgette', 'Concombre', 'Citron'],
+    steps: ['Lavez et coupez les légumes.', 'Préparez la vinaigrette au citron.', 'Mélangez et servez.'],
+  },
+  {
+    name: 'Truite saumonée',
+    category: 'Plats',
+    price: '3 200',
+    timeMin: 30,
+    level: 'Moyen',
+    description: 'Truite poêlée, peau croustillante, légumes rôtis.',
+    ingredients: ['Truite', 'Courgette', 'Citron', "Huile d'olive"],
+    steps: [
+      'Préchauffez le four à 200°C et rôtissez les légumes.',
+      'Saisissez la truite côté peau 4 minutes.',
+      'Retournez 2 minutes et arrosez de citron.',
+      'Dressez avec les légumes.',
+    ],
+  },
+  {
+    name: 'Salade de tomate',
+    category: 'Entrées',
+    price: '1 200',
+    timeMin: 10,
+    level: 'Facile',
+    description: 'Tomates, oignon et basilic, rien de plus.',
+    ingredients: ['Tomate', 'Oignon', 'Basilic'],
+    steps: ['Tranchez les tomates.', "Ajoutez l'oignon et le basilic.", 'Assaisonnez et servez.'],
+  },
+  {
+    name: 'Espadon grillé',
+    category: 'Plats',
+    price: '3 800',
+    timeMin: 25,
+    level: 'Moyen',
+    description: "Pavé d'espadon grillé, asperges et citron.",
+    ingredients: ['Espadon', 'Asperge', 'Citron', "Huile d'olive"],
+    steps: [
+      "Marinez l'espadon 10 minutes.",
+      'Grillez 3 minutes de chaque côté.',
+      'Poêlez les asperges.',
+      'Servez avec un quartier de citron.',
+    ],
+  },
+  {
+    name: 'Citronnade maison',
+    category: 'Boissons',
+    price: '600',
+    timeMin: 5,
+    level: 'Facile',
+    description: 'Citron pressé, eau pétillante et menthe.',
+    ingredients: ['Citron', 'Menthe', 'Sucre'],
+    steps: ['Pressez les citrons.', 'Ajoutez sucre et eau pétillante.', 'Servez avec glaçons et menthe.'],
+  },
+  {
+    name: 'Mousse au chocolat',
+    category: 'Desserts',
+    price: '1 400',
+    timeMin: 20,
+    level: 'Moyen',
+    description: 'Légère et intense, prête après 2 h au frais.',
+    ingredients: ['Chocolat', 'Oeuf', 'Sucre'],
+    steps: ['Faites fondre le chocolat.', 'Incorporez les jaunes puis les blancs montés.', 'Réfrigérez 2 heures.'],
+  },
+];
+
+export const SEED_FRIDGE: Omit<FridgeItem, 'id'>[] = [
+  { name: 'Tomate', category: 'Légume' },
+  { name: 'Courgette', category: 'Légume' },
+  { name: 'Oignon', category: 'Légume' },
+  { name: 'Basilic', category: 'Légume' },
+  { name: 'Citron', category: 'Fruit' },
+  { name: "Huile d'olive", category: 'Autre' },
+];
+
+export const IMPORT_TEMPLATES: ImportTemplate[] = [
+  {
+    name: 'Lasagnes',
+    timeMin: 35,
+    category: 'Plats',
+    ingredients: ['Pâtes', 'Tomate', 'Boeuf haché', 'Fromage'],
+    steps: ['Préparez la sauce', 'Montez les couches', 'Cuisez 35 minutes'],
+  },
+  {
+    name: 'Tacos',
+    timeMin: 35,
+    category: 'Plats',
+    ingredients: ['Tortilla', 'Poulet', 'Oignon', 'Fromage'],
+    steps: ['Cuisez la viande', 'Garnissez les tortillas', 'Gratinez'],
+  },
+  {
+    name: 'Hachis parmentier',
+    timeMin: 35,
+    category: 'Plats',
+    ingredients: ['Pomme de terre', 'Boeuf haché', 'Oignon'],
+    steps: ['Cuisez la viande', 'Préparez la purée', 'Gratinez 20 minutes'],
+  },
+];
