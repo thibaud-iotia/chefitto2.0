@@ -30,6 +30,11 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 | 16 | Recherche = parsing HTML Marmiton ; import = JSON-LD `schema.org/Recipe` | Le JSON-LD est publié par quasiment tous les sites de recettes (SEO Google) : un seul parseur couvre Marmiton, 750g, CuisineAZ… Regex plutôt que DOM : pas de dépendance, même code Deno/Node. |
 | 17 | Garde-fou SSRF : http(s) publics, pas d'IP littérale ni de nom local, port standard, redirections revérifiées, 10 s / 3 Mo max | Le proxy accepte des URL saisies par l'utilisateur. |
 | 18 | Ingrédients : un par ligne (virgules acceptées si une seule ligne) | Les ingrédients importés contiennent des virgules (« 1,5 l de lait »). |
+| 19 | **Photo par recette** = URL https en base (`recipes.image_url`), pas de copie dans Supabase Storage | Choix validé : zéro quota/config en plus. Import : photo JSON-LD de la page (à défaut, vignette du résultat de recherche). |
+| 20 | Recettes sans photo (départ, saisie manuelle) : **recherche Marmiton automatique par nom**, puis par 2 premiers ingrédients ; résultat persisté | Aucune clé API (proxy d'import existant). Une tentative par recette et par session, 2 recherches simultanées max, erreurs passagères non mémorisées. |
+| 21 | Photo cassée (`onerror`) → nouvelle recherche en excluant l'URL, sinon illustration | Les liens tiers peuvent disparaître ; l'app se répare seule. |
+| 22 | Vignettes redimensionnées par le CDN Marmiton (`_w{n}h{n}c1`, `srcset` 1x/2x/3x) ; cache SW `recipe-images` (CacheFirst, 150 entrées, 30 j) | 10 Ko au lieu de 70 Ko par carte ; photos visibles hors ligne. `referrerPolicy=no-referrer`. |
+| 23 | `image_url` filtrée (https, ≤ 2048, sans identifiants) côté client **et** par contrainte SQL ; insert sans la colonne si absente | Données tierces affichées ; front déployable avant la migration SQL. |
 
 ## Tests
 
@@ -45,7 +50,7 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 Voir `supabase/schema.sql`. Toutes les tables ont `user_id` + RLS `auth.uid() = user_id`.
 
 - `profiles(id, name, email, seeded)`
-- `recipes(id, user_id, name, category, price, time_min, level, description, ingredients text[], steps text[], created_at)`
+- `recipes(id, user_id, name, category, price, time_min, level, description, ingredients text[], steps text[], image_url, created_at)`
 - `favorites(user_id, recipe_id)`
 - `fridge_items(id, user_id, name, category, created_at)`
 - `plan_entries(user_id, day 0-6, meal 0-1, recipe_id)` — PK (user_id, day, meal)
@@ -85,6 +90,7 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
 
 - [ ] Copier `assets/dish1.png` (et `logo.png`) du projet Claude Design vers `public/images/` (le MCP ne transfère pas les binaires).
 - [ ] Créer un projet Supabase, exécuter `supabase/schema.sql` dans le SQL editor.
+- [ ] Base déjà créée : ré-exécuter `supabase/schema.sql` (ajoute `recipes.image_url` pour mémoriser les photos).
 - [ ] Dans Supabase › Auth › URL configuration : ajouter l'URL GitHub Pages.
 - [ ] Secrets GitHub du repo : `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 - [ ] GitHub › Settings › Pages › Source : « GitHub Actions ».
@@ -101,12 +107,16 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
   Recherche Marmiton pendant la saisie (anti-rebond 350 ms, annulation, pagination, cache 5 min),
   import par lien (JSON-LD), temps/niveau/coût/source repris. 141 tests unitaires (97,5 % lignes),
   32 E2E hors réseau, 8 E2E live sur vraies données. Edge Function vérifiée sous Deno 2. JS initial 100,5 KiB.
+- 2026-11-14 : photos par recette (ADR 19-23). Import : photo d'origine conservée ; sans photo : recherche
+  Marmiton automatique par nom, persistée ; auto-réparation des liens cassés ; cache hors ligne.
+  180 tests unitaires/intégration (97,8 % lignes), 36 E2E hors réseau (séquentiel), 9 E2E live. JS initial 101,5 KiB.
+  Note : en parallèle (3 workers) sous Windows, quelques E2E échouent par intermittence (`ERR_ABORTED` au
+  `goto`/`reload`), déjà le cas avant ce changement ; CI : 2 workers + 2 relances.
 
 ## Pistes V2
 
-- Photos par recette (Supabase Storage) au lieu de l'image unique de la maquette.
+- Choisir / prendre sa propre photo pour une recette (upload Supabase Storage), en plus de la photo automatique.
 - Suppression / édition de recette, liste de courses générée depuis les « À acheter ».
 - Planning multi-semaines (actuellement une semaine type).
-- Garder la photo des recettes importées (`imageUrl` déjà renvoyé par l'import) une fois les photos par recette en place.
 - Web Share Target (PWA) : « Partager › Chefitto » depuis Marmiton ouvre directement l'import du lien.
 - Limitation de débit sur l'Edge Function si l'app est ouverte à d'autres utilisateurs.

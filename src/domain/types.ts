@@ -21,6 +21,11 @@ export interface Recipe {
   description: string;
   ingredients: string[];
   steps: string[];
+  /**
+   * Photo du plat (https). Reprise de la page importée, ou trouvée automatiquement par nom.
+   * Absente (`undefined` / `null`) tant qu'aucune photo n'a été trouvée : on affiche l'illustration.
+   */
+  imageUrl?: string | null;
 }
 
 export type RecipeDraft = Omit<Recipe, 'id'>;

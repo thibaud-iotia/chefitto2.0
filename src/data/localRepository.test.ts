@@ -45,4 +45,34 @@ describe('LocalRepository', () => {
     expect(fresh.recipes.length).toBeGreaterThan(0);
     await new LocalRepository().resetPassword();
   });
+
+  it('enregistre la photo d’une recette, et charge les données d’avant les photos', async () => {
+    const repo = new LocalRepository();
+    const u = await repo.signIn('a@b.fr');
+    const [first, second] = (await repo.loadAll(u)).recipes;
+    expect(first!.imageUrl).toBeUndefined(); // données créées avant la fonctionnalité : champ absent
+    await repo.setRecipeImage(u, first!.id, 'https://img.test/1.webp');
+    const after = (await repo.loadAll(u)).recipes;
+    expect(after[0]!.imageUrl).toBe('https://img.test/1.webp');
+    expect(after[1]).toEqual(second);
+    await repo.setRecipeImage(u, first!.id, null);
+    expect((await repo.loadAll(u)).recipes[0]!.imageUrl).toBeNull();
+  });
+
+  it('conserve la photo d’une recette ajoutée', async () => {
+    const repo = new LocalRepository();
+    const u = await repo.signIn('a@b.fr');
+    const r = await repo.addRecipe(u, {
+      name: 'Tarte',
+      category: 'Desserts',
+      price: '—',
+      timeMin: 30,
+      level: 'Facile',
+      description: '',
+      ingredients: ['Pomme'],
+      steps: ['Cuire'],
+      imageUrl: 'https://img.test/tarte.webp',
+    });
+    expect((await repo.loadAll(u)).recipes.find((x) => x.id === r.id)?.imageUrl).toBe('https://img.test/tarte.webp');
+  });
 });

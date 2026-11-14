@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ImportedRecipe } from '../data/recipeImport';
+import { safeImageUrl } from '../domain/images';
 import { EMPTY_FORM, moveItem, removeStep, type RecipeForm } from '../domain/logic';
 import type { ImportTemplate, RecipeCategory } from '../domain/types';
 
@@ -13,7 +14,7 @@ interface FormState {
   removeStep(i: number): void;
   importTemplate(t: ImportTemplate): void;
   importRecipe(r: ImportedRecipe): void;
-  /** Oublie la source importée (temps, niveau, prix repassent aux valeurs par défaut). */
+  /** Oublie la source importée (temps, niveau, prix, photo repassent aux valeurs par défaut). */
   clearMeta(): void;
   reset(category?: RecipeCategory): void;
 }
@@ -34,6 +35,7 @@ export const useRecipeForm = create<FormState>((set) => ({
         ingredients: t.ingredients.join('\n'),
         steps: [...t.steps],
         meta: { timeMin: t.timeMin, level: 'Facile', price: '—', source: null },
+        imageUrl: null,
       },
     })),
   importRecipe: (r) =>
@@ -45,8 +47,10 @@ export const useRecipeForm = create<FormState>((set) => ({
         description: r.description,
         steps: r.steps.length ? [...r.steps] : [''],
         meta: { timeMin: r.timeMin, level: r.level, price: r.price, source: { name: r.sourceName, url: r.sourceUrl } },
+        imageUrl: safeImageUrl(r.imageUrl),
       },
     }),
-  clearMeta: () => set((s) => ({ form: { ...s.form, meta: null } })),
+  // La photo appartient au site source : sans la source, on la retire (une autre sera cherchée).
+  clearMeta: () => set((s) => ({ form: { ...s.form, meta: null, imageUrl: null } })),
   reset: (category) => set({ form: { ...EMPTY_FORM, category: category ?? EMPTY_FORM.category } }),
 }));

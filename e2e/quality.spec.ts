@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from './fixtures';
+import { PHOTO_ORIGIN, expect, photoUrl, test } from './fixtures';
 
 const SCREENS = ['/home', '/fridge', '/planning', '/suggestions', '/add', '/add/import', '/profile'];
 
@@ -41,6 +41,24 @@ test.describe('PWA', () => {
     await context.setOffline(true);
     await page.reload();
     await expect(page.getByRole('button', { name: 'Commencer' })).toBeVisible();
+    await context.setOffline(false);
+  });
+
+  test('les photos des recettes restent visibles hors-ligne', async ({ loggedIn: page, context, browserName }) => {
+    test.skip(browserName !== 'chromium', 'Service worker testé sur Chromium');
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload(); // page contrôlée par le SW : les photos passent par son cache
+    const img = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Mousse au chocolat' }) }).locator('[data-photo] img');
+    const loaded = () => img.evaluate((i: HTMLImageElement) => (i.complete ? i.naturalWidth : 0));
+    await expect(img).toHaveAttribute('src', photoUrl('Mousse au chocolat'));
+    await expect.poll(loaded).toBeGreaterThan(0);
+
+    // Plus de serveur de photos ni de réseau : seule la copie en cache peut s'afficher.
+    await context.unroute(`${PHOTO_ORIGIN}/**`);
+    await context.setOffline(true);
+    await page.reload();
+    await expect(img).toHaveAttribute('src', photoUrl('Mousse au chocolat'));
+    await expect.poll(loaded).toBeGreaterThan(0);
     await context.setOffline(false);
   });
 });

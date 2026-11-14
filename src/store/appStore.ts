@@ -3,6 +3,7 @@ import { capitalize, planKey } from '../domain/logic';
 import type { FoodCategory, FridgeItem, Plan, Profile, Recipe, RecipeDraft, User } from '../domain/types';
 import type { Repository } from '../data/repository';
 import { defaultImporter, type RecipeImporter } from '../data/recipeImport';
+import { createImageFinder, type ImageFinder } from '../data/recipeImages';
 
 export type Sheet = { type: 'pick'; day: number; meal: number } | { type: 'plan'; recipeId: string } | null;
 
@@ -35,6 +36,11 @@ export interface AppActions {
   removeFridgeItem(id: string): Promise<void>;
   setPlanEntry(day: number, meal: number, recipeId: string | null): Promise<void>;
   addRecipe(draft: RecipeDraft): Promise<Recipe | null>;
+  /**
+   * Cherche et mémorise une photo pour une recette qui n'en a pas (une seule tentative par session).
+   * Avec `brokenUrl` : la photo actuelle ne se charge plus, on en cherche une autre.
+   */
+  ensureRecipeImage(recipeId: string, brokenUrl?: string): Promise<void>;
   updateProfile(profile: Profile): Promise<void>;
   flash(text: string): void;
   openSheet(sheet: Exclude<Sheet, null>): void;
@@ -54,8 +60,16 @@ const EMPTY: Pick<AppState, 'profile' | 'recipes' | 'favorites' | 'fridge' | 'pl
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Erreur inattendue');
 
-export function createAppStore(repo: Repository, importer: RecipeImporter = defaultImporter(repo.mode, () => repo.getAccessToken())) {
+export function createAppStore(
+  repo: Repository,
+  importer: RecipeImporter = defaultImporter(repo.mode, () => repo.getAccessToken()),
+  images: ImageFinder = createImageFinder(importer),
+) {
   let toastSeq = 0;
+  /** Recherches de photo déjà lancées cette session (`id` ou `id|urlCassée`). */
+  const imageLookups = new Set<string>();
+  /** Photos qui ne se chargent plus : jamais reproposées. */
+  const brokenImages = new Set<string>();
   let loading: Promise<void> | null = null;
   let unsubscribe: (() => void) | null = null;
 
@@ -220,6 +234,37 @@ export function createAppStore(repo: Repository, importer: RecipeImporter = defa
           fail(e);
           return null;
         }
+      },
+
+      async ensureRecipeImage(recipeId, brokenUrl) {
+        const user = get().user;
+        const recipe = get().recipes.find((r) => r.id === recipeId);
+        if (!user || !recipe) return;
+        if (brokenUrl) {
+          if (recipe.imageUrl !== brokenUrl) return;
+          brokenImages.add(brokenUrl);
+        } else if (recipe.imageUrl) {
+          return;
+        }
+        const key = brokenUrl ? `${recipeId}|${brokenUrl}` : recipeId;
+        if (imageLookups.has(key)) return;
+        imageLookups.add(key);
+
+        let found: string | null;
+        try {
+          found = await images.find(recipe, brokenImages);
+        } catch {
+          imageLookups.delete(key); // hors ligne / service indisponible : on réessaiera au prochain affichage
+          return;
+        }
+        const current = get().recipes.find((r) => r.id === recipeId);
+        // Recette supprimée, utilisateur changé ou photo modifiée entre-temps : on ne touche à rien.
+        if (!current || current.imageUrl !== recipe.imageUrl || get().user?.id !== user.id) return;
+        if (!found && !brokenUrl) return;
+        const imageUrl = found ?? null;
+        set((s) => ({ recipes: s.recipes.map((r) => (r.id === recipeId ? { ...r, imageUrl } : r)) }));
+        // Non bloquant : en cas d'échec, la photo reste affichée et sera recherchée à la prochaine session.
+        await repo.setRecipeImage(user, recipeId, imageUrl).catch(() => undefined);
       },
 
       updateProfile(profile) {

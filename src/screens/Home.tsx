@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
-import { DishImage } from '../components/DishImage';
+import { RecipeImage } from '../components/RecipeImage';
 import { Heart, Search } from '../components/icons';
 import {
   badgeTone,
@@ -63,7 +63,7 @@ export default function Home() {
             </span>
             <span className={s.heroCta}>Voir la recette</span>
           </div>
-          <DishImage size={104} className={s.heroPlate} eager />
+          <RecipeImage recipe={best} size={104} className={s.heroPlate} eager />
         </button>
       )}
 
@@ -126,7 +126,7 @@ export default function Home() {
 function DishCard({ recipe, pct, fav, onFav }: { recipe: Recipe; pct: number; fav: boolean; onFav: () => void }) {
   return (
     <li className={`${s.card} ${s.clickable} ${s.dishCard}`}>
-      <DishImage size={132} className={s.dishCardPlate} />
+      <RecipeImage recipe={recipe} size={132} className={s.dishCardPlate} />
       <Link to={`/recipe/${recipe.id}`} className={s.dishCardLink} aria-label={recipe.name} />
       <button
         type="button"

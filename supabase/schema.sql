@@ -39,9 +39,15 @@ create table if not exists public.recipes (
   description text not null default '',
   ingredients text[] not null default '{}',
   steps text[] not null default '{}',
+  image_url text check (image_url is null or (image_url ~ '^https://' and char_length(image_url) <= 2048)),
   created_at timestamptz not null default now()
 );
 create index if not exists recipes_user_idx on public.recipes (user_id, created_at desc);
+
+-- Migration (bases créées avant les photos) : photo du plat, importée ou trouvée automatiquement.
+alter table public.recipes
+  add column if not exists image_url text
+  check (image_url is null or (image_url ~ '^https://' and char_length(image_url) <= 2048));
 
 -- Favoris ---------------------------------------------------------------
 create table if not exists public.favorites (

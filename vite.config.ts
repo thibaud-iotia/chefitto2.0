@@ -41,6 +41,16 @@ export default defineConfig({
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'google-fonts', expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 } },
           },
+          {
+            // Photos des recettes (sites tiers, sans CORS → réponses opaques, statut 0) : dispo hors ligne.
+            urlPattern: ({ request, sameOrigin }) => request.destination === 'image' && !sameOrigin,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'recipe-images',
+              cacheableResponse: { statuses: [0, 200] },
+              expiration: { maxEntries: 150, maxAgeSeconds: 60 * 60 * 24 * 30, purgeOnQuotaError: true },
+            },
+          },
         ],
       },
     }),

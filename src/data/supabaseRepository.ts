@@ -1,4 +1,5 @@
 import type { SupabaseClient, User as SbUser } from '@supabase/supabase-js';
+import { safeImageUrl } from '../domain/images';
 import { planKey } from '../domain/logic';
 import { SEED_FRIDGE, SEED_RECIPES } from '../domain/seed';
 import type {
@@ -25,6 +26,8 @@ interface RecipeRow {
   description: string;
   ingredients: string[];
   steps: string[];
+  /** Absente si la migration `image_url` n'a pas encore été appliquée. */
+  image_url?: string | null;
 }
 
 export const toRecipe = (r: RecipeRow): Recipe => ({
@@ -37,18 +40,27 @@ export const toRecipe = (r: RecipeRow): Recipe => ({
   description: r.description,
   ingredients: r.ingredients ?? [],
   steps: r.steps ?? [],
+  imageUrl: safeImageUrl(r.image_url),
 });
 
-export const toRecipeRow = (d: RecipeDraft) => ({
-  name: d.name,
-  category: d.category,
-  price: d.price,
-  time_min: d.timeMin,
-  level: d.level,
-  description: d.description,
-  ingredients: d.ingredients,
-  steps: d.steps,
-});
+export const toRecipeRow = (d: RecipeDraft) => {
+  const imageUrl = safeImageUrl(d.imageUrl);
+  return {
+    name: d.name,
+    category: d.category,
+    price: d.price,
+    time_min: d.timeMin,
+    level: d.level,
+    description: d.description,
+    ingredients: d.ingredients,
+    steps: d.steps,
+    // Colonne omise quand il n'y a pas de photo : les insertions marchent même avant la migration `image_url`.
+    ...(imageUrl ? { image_url: imageUrl } : {}),
+  };
+};
+
+/** Erreur PostgREST « colonne inconnue » : la base n'a pas encore la colonne `image_url`. */
+const isMissingImageColumn = (e: { message: string } | null) => !!e && /image_url/i.test(e.message);
 
 const toUser = (u: SbUser): User => ({ id: u.id, email: u.email ?? '' });
 
@@ -146,8 +158,15 @@ export class SupabaseRepository implements Repository {
   }
 
   async addRecipe(_user: User, draft: RecipeDraft): Promise<Recipe> {
-    const row = check(await this.sb.from('recipes').insert(toRecipeRow(draft)).select('*').single<RecipeRow>());
-    return toRecipe(row);
+    const insert = (d: RecipeDraft) => this.sb.from('recipes').insert(toRecipeRow(d)).select('*').single<RecipeRow>();
+    let res = await insert(draft);
+    // Front déployé avant la migration SQL : on enregistre la recette sans sa photo plutôt que d'échouer.
+    if (draft.imageUrl && isMissingImageColumn(res.error)) res = await insert({ ...draft, imageUrl: null });
+    return toRecipe(check(res));
+  }
+
+  async setRecipeImage(_user: User, recipeId: string, imageUrl: string | null): Promise<void> {
+    check(await this.sb.from('recipes').update({ image_url: safeImageUrl(imageUrl) }).eq('id', recipeId));
   }
 
   async setFavorite(user: User, recipeId: string, on: boolean): Promise<void> {

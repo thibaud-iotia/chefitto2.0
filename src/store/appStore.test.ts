@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { LocalRepository } from '../data/localRepository';
 import { RepositoryError } from '../data/repository';
+import type { ImageFinder } from '../data/recipeImages';
 import { SEED_RECIPES } from '../domain/seed';
 import { createAppStore } from './appStore';
 
@@ -162,5 +163,102 @@ describe('appStore — mutations', () => {
     expect(store.getState().sheet).toBeNull();
     store.getState().setSplashSeen();
     expect(store.getState().splashSeen).toBe(true);
+  });
+});
+
+describe('appStore — photos des recettes', () => {
+  async function storeWith(find: ImageFinder['find']) {
+    const repo = new LocalRepository();
+    const finder = { find: vi.fn(find) };
+    const store = createAppStore(repo, undefined, finder);
+    await store.getState().init();
+    await store.getState().signIn('toto@cuisine.fr', 'secret1');
+    const user = store.getState().user!;
+    const first = () => store.getState().recipes[0]!;
+    return { repo, store, finder, user, first };
+  }
+
+  it('cherche une photo, l’affiche et la persiste (une seule fois par session)', async () => {
+    const { repo, store, finder, user, first } = await storeWith(async () => 'https://img.test/1.webp');
+    const id = first().id;
+    await store.getState().ensureRecipeImage(id);
+    expect(first().imageUrl).toBe('https://img.test/1.webp');
+    expect((await repo.loadAll(user)).recipes.find((r) => r.id === id)?.imageUrl).toBe('https://img.test/1.webp');
+    await store.getState().ensureRecipeImage(id);
+    expect(finder.find).toHaveBeenCalledTimes(1);
+  });
+
+  it('ne cherche pas si la recette a déjà une photo, est inconnue ou sans utilisateur', async () => {
+    const { store, finder, first } = await storeWith(async () => 'https://img.test/1.webp');
+    store.setState({ recipes: [{ ...first(), imageUrl: 'https://img.test/deja.webp' }] });
+    await store.getState().ensureRecipeImage(first().id);
+    await store.getState().ensureRecipeImage('inconnue');
+    await store.getState().signOut();
+    await store.getState().ensureRecipeImage('x');
+    expect(finder.find).not.toHaveBeenCalled();
+  });
+
+  it('dé-duplique les demandes simultanées', async () => {
+    const { store, finder, first } = await storeWith(async () => 'https://img.test/1.webp');
+    await Promise.all([store.getState().ensureRecipeImage(first().id), store.getState().ensureRecipeImage(first().id)]);
+    expect(finder.find).toHaveBeenCalledTimes(1);
+  });
+
+  it('rien trouvé : garde l’illustration et ne réessaie pas', async () => {
+    const { repo, store, finder, first } = await storeWith(async () => null);
+    const save = vi.spyOn(repo, 'setRecipeImage');
+    await store.getState().ensureRecipeImage(first().id);
+    await store.getState().ensureRecipeImage(first().id);
+    expect(first().imageUrl).toBeUndefined();
+    expect(save).not.toHaveBeenCalled();
+    expect(finder.find).toHaveBeenCalledTimes(1);
+  });
+
+  it('erreur passagère : réessaie au prochain affichage', async () => {
+    const { store, finder, first } = await storeWith(async () => 'https://img.test/1.webp');
+    finder.find.mockRejectedValueOnce(new Error('hors ligne'));
+    await store.getState().ensureRecipeImage(first().id);
+    expect(first().imageUrl).toBeUndefined();
+    await store.getState().ensureRecipeImage(first().id);
+    expect(first().imageUrl).toBe('https://img.test/1.webp');
+  });
+
+  it('photo cassée : en cherche une autre en excluant la cassée', async () => {
+    const { store, finder, first } = await storeWith(async (_r, exclude) =>
+      exclude?.has('https://img.test/1.webp') ? 'https://img.test/2.webp' : 'https://img.test/1.webp',
+    );
+    await store.getState().ensureRecipeImage(first().id);
+    // Signalement obsolète (la photo a déjà changé) : ignoré.
+    await store.getState().ensureRecipeImage(first().id, 'https://img.test/autre.webp');
+    expect(finder.find).toHaveBeenCalledTimes(1);
+    await store.getState().ensureRecipeImage(first().id, 'https://img.test/1.webp');
+    expect(first().imageUrl).toBe('https://img.test/2.webp');
+    expect([...finder.find.mock.calls[1]![1]!]).toEqual(['https://img.test/1.webp']);
+  });
+
+  it('photo cassée sans remplaçant : revient à l’illustration et l’enregistre', async () => {
+    const { repo, store, user, first } = await storeWith(async (_r, exclude) => (exclude?.size ? null : 'https://img.test/1.webp'));
+    await store.getState().ensureRecipeImage(first().id);
+    await store.getState().ensureRecipeImage(first().id, 'https://img.test/1.webp');
+    expect(first().imageUrl).toBeNull();
+    expect((await repo.loadAll(user)).recipes[0]!.imageUrl).toBeNull();
+  });
+
+  it('ignore le résultat si la recette a changé entre-temps', async () => {
+    let release!: (v: string) => void;
+    const { store, first } = await storeWith(() => new Promise<string>((r) => (release = r)));
+    const pending = store.getState().ensureRecipeImage(first().id);
+    store.setState({ recipes: [{ ...first(), imageUrl: 'https://img.test/importee.webp' }, ...store.getState().recipes.slice(1)] });
+    release('https://img.test/trouvee.webp');
+    await pending;
+    expect(first().imageUrl).toBe('https://img.test/importee.webp');
+  });
+
+  it('un échec d’enregistrement n’empêche pas l’affichage', async () => {
+    const { repo, store, first } = await storeWith(async () => 'https://img.test/1.webp');
+    vi.spyOn(repo, 'setRecipeImage').mockRejectedValueOnce(new Error('réseau'));
+    await store.getState().ensureRecipeImage(first().id);
+    expect(first().imageUrl).toBe('https://img.test/1.webp');
+    expect(store.getState().toast).toBeNull();
   });
 });

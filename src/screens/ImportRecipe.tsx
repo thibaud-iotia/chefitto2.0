@@ -37,14 +37,15 @@ export default function ImportRecipe() {
   const templates = link ? [] : IMPORT_TEMPLATES.filter((t) => !term || normalize(t.name).includes(normalize(term)));
   const online = term.length >= MIN_QUERY;
 
-  async function importFrom(url: string) {
+  /** `fallbackImage` : vignette du résultat de recherche, si la page elle-même ne publie pas de photo. */
+  async function importFrom(url: string, fallbackImage: string | null = null) {
     if (importing) return;
     const ac = new AbortController();
     abortRef.current = ac;
     setImporting(url);
     try {
       const recipe = await importer.fetchRecipe(url, ac.signal);
-      importRecipe(recipe);
+      importRecipe({ ...recipe, imageUrl: recipe.imageUrl ?? fallbackImage });
       back();
       flash('Recette importée');
     } catch (e) {
@@ -156,7 +157,7 @@ export default function ImportRecipe() {
                 <button
                   type="button"
                   className={`${s.card} ${s.clickable} ${s.webItem}`}
-                  onClick={() => void importFrom(r.url)}
+                  onClick={() => void importFrom(r.url, r.imageUrl)}
                   disabled={!!importing}
                   aria-busy={importing === r.url}
                 >

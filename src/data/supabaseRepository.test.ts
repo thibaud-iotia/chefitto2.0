@@ -57,6 +57,15 @@ describe('mapping', () => {
       steps: [],
     });
   });
+
+  it('photo : image_url ↔ imageUrl, filtrée, colonne omise si absente', () => {
+    expect(toRecipe(row).imageUrl).toBeNull(); // base sans la colonne
+    expect(toRecipe({ ...row, image_url: 'https://img.test/a.webp' }).imageUrl).toBe('https://img.test/a.webp');
+    expect(toRecipe({ ...row, image_url: 'javascript:alert(1)' }).imageUrl).toBeNull();
+    expect(toRecipeRow({ ...toRecipe(row), imageUrl: 'https://img.test/a.webp' })).toMatchObject({ image_url: 'https://img.test/a.webp' });
+    expect(toRecipeRow(toRecipe(row))).not.toHaveProperty('image_url');
+    expect(toRecipeRow({ ...toRecipe(row), imageUrl: 'data:image/png;base64,AA' })).not.toHaveProperty('image_url');
+  });
 });
 
 describe('friendlyAuthError', () => {
@@ -178,6 +187,40 @@ describe('SupabaseRepository — données', () => {
       'plan_entries:delete',
       'profiles:update',
     ]);
+  });
+
+  it('photo : enregistre l’URL trouvée', async () => {
+    const { client, calls } = fakeClient({});
+    await new SupabaseRepository(client).setRecipeImage(user, 'r1', 'https://img.test/a.webp');
+    await new SupabaseRepository(client).setRecipeImage(user, 'r1', null);
+    expect(calls.map((c) => c.ops)).toEqual([
+      [
+        ['update', [{ image_url: 'https://img.test/a.webp' }]],
+        ['eq', ['id', 'r1']],
+      ],
+      [
+        ['update', [{ image_url: null }]],
+        ['eq', ['id', 'r1']],
+      ],
+    ]);
+  });
+
+  it('photo : base pas encore migrée → recette enregistrée sans sa photo', async () => {
+    const missing = { data: null, error: { message: "Could not find the 'image_url' column of 'recipes' in the schema cache" } };
+    const { client, calls } = fakeClient({ recipes: [missing, { data: row, error: null }] });
+    const r = await new SupabaseRepository(client).addRecipe(user, { ...toRecipe(row), imageUrl: 'https://img.test/a.webp' });
+    expect(r.id).toBe('r1');
+    const inserted = calls.map((c) => c.ops.find(([op]) => op === 'insert')![1][0]);
+    expect(inserted[0]).toHaveProperty('image_url', 'https://img.test/a.webp');
+    expect(inserted[1]).not.toHaveProperty('image_url');
+  });
+
+  it('photo : les autres erreurs d’insertion ne sont pas masquées', async () => {
+    const { client, calls } = fakeClient({ recipes: [{ data: null, error: { message: 'Failed to fetch' } }] });
+    await expect(new SupabaseRepository(client).addRecipe(user, { ...toRecipe(row), imageUrl: 'https://img.test/a.webp' })).rejects.toThrow(
+      'Connexion réseau impossible',
+    );
+    expect(calls).toHaveLength(1);
   });
 
   it('propage les erreurs de base', async () => {

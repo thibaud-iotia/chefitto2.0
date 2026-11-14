@@ -130,6 +130,13 @@ export class LocalRepository implements Repository {
     return recipe;
   }
 
+  async setRecipeImage(user: User, recipeId: string, imageUrl: string | null): Promise<void> {
+    await this.tick();
+    this.mutate(user, (d) => {
+      d.recipes = d.recipes.map((r) => (r.id === recipeId ? { ...r, imageUrl } : r));
+    });
+  }
+
   async setFavorite(user: User, recipeId: string, on: boolean): Promise<void> {
     await this.tick();
     this.mutate(user, (d) => {

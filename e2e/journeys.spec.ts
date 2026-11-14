@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures';
+import { PHOTO_ORIGIN, expect, photoUrl, test } from './fixtures';
 
 test('parcours complet : recette → planning → mode cuisine', async ({ loggedIn: page }) => {
   await page.getByRole('link', { name: 'Veggie tomato mix' }).click();
@@ -54,6 +54,8 @@ test('créer une recette depuis un modèle importé', async ({ loggedIn: page })
 
 test('rechercher en ligne et importer une recette (API simulée)', async ({ loggedIn: page }) => {
   // Réponses figées : ce parcours ne dépend pas du réseau (les vraies données : live.spec.ts).
+  // Les photos automatiques des recettes de départ sont d'abord toutes trouvées, pour ne compter que l'import.
+  await expect(page.getByRole('list', { name: 'Recettes' }).locator('[data-photo]')).toHaveCount(8);
   const calls: string[] = [];
   await page.route('**/api/recipe-import**', async (route) => {
     const url = new URL(route.request().url());
@@ -126,4 +128,64 @@ test('le bouton retour du navigateur fonctionne', async ({ loggedIn: page }) => 
   await expect(page).toHaveURL(/#\/recipe\//);
   await page.goBack();
   await expect(page.getByText('Que cuisine-t-on')).toBeVisible();
+});
+
+test('photos : trouvées automatiquement, mémorisées, conservées à l’import', async ({ loggedIn: page }) => {
+  const lookups: string[] = [];
+  page.on('request', (req) => {
+    const url = new URL(req.url());
+    if (url.pathname.endsWith('/api/recipe-import') && url.searchParams.has('q')) lookups.push(url.searchParams.get('q')!);
+  });
+  const photo = page.locator('[data-photo] img');
+  const loaded = (img: ReturnType<typeof page.locator>) => img.evaluate((i: HTMLImageElement) => (i.complete ? i.naturalWidth : 0));
+
+  // Accueil : chaque carte affiche la photo trouvée pour son nom.
+  const card = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Mousse au chocolat' }) });
+  await expect(card.locator('[data-photo] img')).toHaveAttribute('src', photoUrl('Mousse au chocolat'));
+  await expect.poll(() => loaded(card.locator('[data-photo] img'))).toBeGreaterThan(0);
+  await expect(page.getByRole('list', { name: 'Recettes' }).locator('[data-photo]')).toHaveCount(8);
+
+  // Détail, puis rechargement : la photo est mémorisée, pas de nouvelle recherche.
+  await page.getByRole('link', { name: 'Mousse au chocolat' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Mousse au chocolat' })).toBeVisible();
+  await expect(photo).toHaveAttribute('src', photoUrl('Mousse au chocolat'));
+  const before = lookups.length;
+  await page.reload();
+  await expect(photo).toHaveAttribute('src', photoUrl('Mousse au chocolat'));
+  await expect.poll(() => loaded(photo)).toBeGreaterThan(0);
+  expect(lookups.length).toBe(before);
+
+  // Import par lien : la photo de la page est gardée (aperçu puis fiche).
+  await page.route('**/api/recipe-import**', (route) => {
+    if (!new URL(route.request().url()).searchParams.has('url')) return route.fallback();
+    return route.fulfill({
+      json: {
+        recipe: {
+          name: 'Tarte aux pommes',
+          category: 'Desserts',
+          timeMin: 50,
+          level: 'Facile',
+          price: '€',
+          description: 'Source : marmiton.org.',
+          ingredients: ['4 pommes', '1 pâte brisée'],
+          steps: ['Garnir.', 'Cuire 40 min.'],
+          servings: null,
+          imageUrl: `${PHOTO_ORIGIN}/tarte-importee.png`,
+          sourceUrl: 'https://www.marmiton.org/recettes/recette_tarte-aux-pommes_1.aspx',
+          sourceName: 'marmiton.org',
+        },
+      },
+    });
+  });
+  await page.goto('./#/add/import');
+  await page.getByRole('searchbox').fill('https://www.marmiton.org/recettes/recette_tarte-aux-pommes_1.aspx');
+  await page.getByRole('searchbox').press('Enter');
+  await expect(page.getByText('Recette importée')).toBeVisible();
+  await expect(photo).toHaveAttribute('src', `${PHOTO_ORIGIN}/tarte-importee.png`);
+  await page.getByRole('button', { name: 'Ajouter la recette' }).click();
+  await expect(page.getByText('Recette ajoutée')).toBeVisible();
+  await page.getByRole('link', { name: 'Tarte aux pommes' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Tarte aux pommes' })).toBeVisible();
+  await expect(photo).toHaveAttribute('src', `${PHOTO_ORIGIN}/tarte-importee.png`);
+  expect(lookups).not.toContain('Tarte aux pommes');
 });

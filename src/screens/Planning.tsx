@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { DishImage } from '../components/DishImage';
+import { RecipeImage } from '../components/RecipeImage';
 import { dayHasMeal, planKey, plannedCount, weekdayIndex } from '../domain/logic';
 import { DAYS, MEALS, SLOTS_PER_WEEK } from '../domain/types';
 import { useApp } from '../store/storeContext';
@@ -48,7 +48,7 @@ export default function Planning() {
         return (
           <div key={meal} className={`${s.card} ${s.slot}`} data-testid={`slot-${i}`}>
             {dish ? (
-              <DishImage size={72} />
+              <RecipeImage recipe={dish} size={72} />
             ) : (
               <div className={s.slotEmpty} aria-hidden="true">
                 +

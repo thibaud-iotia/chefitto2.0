@@ -41,12 +41,16 @@ projet Claude Design, place-le dans `public/images/dish1.png`, puis :
 node scripts/gen-assets.mjs   # crée public/images/dish.webp (~50 Ko au lieu de 700 Ko)
 ```
 
-En attendant, une illustration de secours s'affiche.
+En attendant, une illustration de secours s'affiche. Ces images ne servent plus que pour l'écran d'accueil
+et en attendant la photo d'une recette : chaque recette a sa propre photo (reprise de la page importée,
+ou trouvée automatiquement par nom sur Marmiton, via la fonction d'import).
 
 ### 2. Supabase
 
 1. Crée un projet sur https://supabase.com (offre gratuite).
-2. **SQL Editor** : colle et exécute `supabase/schema.sql`.
+2. **SQL Editor** : colle et exécute `supabase/schema.sql`. Le script est ré-exécutable : sur une base
+   existante, il ajoute la colonne `recipes.image_url` (photos des recettes). Sans cette colonne, l'app
+   fonctionne mais les photos ne sont pas mémorisées.
 3. **Authentication › URL Configuration** : *Site URL* = `https://<ton-user>.github.io/<repo>/`
    (et ajoute la même URL dans *Redirect URLs*).
 4. Optionnel : **Authentication › Providers › Email** : désactive « Confirm email » si tu veux

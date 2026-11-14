@@ -1,5 +1,6 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { weekdayIndex } from '../domain/logic';
 import { renderApp } from '../test/renderApp';
 
 describe('Splash & Auth', () => {
@@ -396,6 +397,107 @@ describe('Import en ligne', () => {
     await user.type(screen.getByRole('searchbox'), 'lasagnes');
     expect(await screen.findByRole('alert')).toHaveTextContent(/injoignable/);
     expect(screen.getByRole('button', { name: /Lasagnes/ })).toBeEnabled();
+  });
+
+  it('garde la photo de la page importée et l’enregistre avec la recette', async () => {
+    stubImportApi((p) =>
+      p.get('url')
+        ? { body: { recipe: { ...IMPORTED, imageUrl: 'https://img.test/risotto.jpg' } } }
+        : { body: { results: [RESULT(2, 'Risotto aux cèpes')], page: 1, hasMore: false } },
+    );
+    const { user, store } = await renderApp({ route: '/add/import' });
+    await user.type(screen.getByRole('searchbox'), 'risotto');
+    await user.click(await screen.findByRole('button', { name: /Risotto aux cèpes/ }));
+    await screen.findByText('Recette importée');
+    expect(document.querySelector('[data-photo] img')).toHaveAttribute('src', 'https://img.test/risotto.jpg');
+    await user.click(screen.getByRole('button', { name: 'Ajouter la recette' }));
+    await screen.findByText('Recette ajoutée');
+    expect(store.getState().recipes[0]).toMatchObject({ name: 'Risotto au chorizo', imageUrl: 'https://img.test/risotto.jpg' });
+  });
+
+  it('page sans photo : reprend la vignette du résultat ; oublier la source retire la photo', async () => {
+    stubImportApi((p) =>
+      p.get('url') ? { body: { recipe: IMPORTED } } : { body: { results: [RESULT(1, 'Risotto au chorizo')], page: 1, hasMore: false } },
+    );
+    const { user, store } = await renderApp({ route: '/add/import' });
+    await user.type(screen.getByRole('searchbox'), 'risotto');
+    await user.click(await screen.findByRole('button', { name: /Risotto au chorizo/ }));
+    await screen.findByText('Recette importée');
+    expect(document.querySelector('[data-photo] img')).toHaveAttribute('src', 'https://assets.afcdn.com/recipe/1.webp');
+    await user.click(screen.getByRole('button', { name: 'Oublier la source importée' }));
+    expect(document.querySelector('[data-photo]')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Ajouter la recette' }));
+    await screen.findByText('Recette ajoutée');
+    expect(store.getState().recipes[0]!.imageUrl).toBeNull();
+  });
+
+  it('aperçu cassé : la photo importée est abandonnée', async () => {
+    stubImportApi(() => ({ body: { recipe: { ...IMPORTED, imageUrl: 'https://img.test/casse.jpg' } } }));
+    const { user, store } = await renderApp({ route: '/add/import' });
+    await user.type(screen.getByRole('searchbox'), 'https://www.marmiton.org/recettes/recette_1.aspx');
+    await user.keyboard('{Enter}');
+    await screen.findByText('Recette importée');
+    fireEvent.error(document.querySelector('[data-photo] img')!);
+    await user.click(screen.getByRole('button', { name: 'Ajouter la recette' }));
+    await screen.findByText('Recette ajoutée');
+    expect(store.getState().recipes[0]!.imageUrl).toBeNull();
+  });
+});
+
+describe('Photos automatiques', () => {
+  /** Photo déterministe par nom ; une photo exclue (cassée) est remplacée par une variante « -2 ». */
+  const finder = () => ({
+    find: vi.fn(async (r: { name: string }, exclude?: ReadonlySet<string>) => {
+      const url = `https://img.test/${encodeURIComponent(r.name)}.webp`;
+      return exclude?.has(url) ? url.replace('.webp', '-2.webp') : url;
+    }),
+  });
+  const photos = () => [...document.querySelectorAll('[data-photo] img')].map((i) => i.getAttribute('src'));
+
+  it('chaque recette reçoit une photo, cherchée une seule fois, visible sur l’accueil et le détail', async () => {
+    const images = finder();
+    const { user, store } = await renderApp({ images });
+    const count = store.getState().recipes.length;
+    // Une photo par carte + celle du héros.
+    await waitFor(() => expect(photos()).toHaveLength(count + 1));
+    expect(photos()).toContain('https://img.test/Mousse%20au%20chocolat.webp');
+    expect(images.find).toHaveBeenCalledTimes(count);
+    expect(store.getState().recipes.every((r) => r.imageUrl?.startsWith('https://img.test/'))).toBe(true);
+
+    await user.click(screen.getByRole('link', { name: 'Mousse au chocolat' }));
+    await screen.findByRole('heading', { name: 'Mousse au chocolat' });
+    expect(photos()).toEqual(['https://img.test/Mousse%20au%20chocolat.webp']);
+    expect(images.find).toHaveBeenCalledTimes(count);
+
+    // La photo ne se charge plus : une autre est cherchée et affichée.
+    fireEvent.error(document.querySelector('[data-photo] img')!);
+    await waitFor(() => expect(photos()).toEqual(['https://img.test/Mousse%20au%20chocolat-2.webp']));
+  });
+
+  it('une recette saisie à la main reçoit une photo après l’ajout', async () => {
+    const images = finder();
+    const { user, store } = await renderApp({ route: '/add', images });
+    await user.type(screen.getByLabelText('Nom du plat'), 'Pizza maison');
+    await user.click(screen.getByRole('button', { name: 'Ajouter la recette' }));
+    await screen.findByText('Recette ajoutée');
+    await waitFor(() => expect(photos()).toContain('https://img.test/Pizza%20maison.webp'));
+    expect(store.getState().recipes[0]).toMatchObject({ name: 'Pizza maison', imageUrl: 'https://img.test/Pizza%20maison.webp' });
+  });
+
+  it('suggestions et planning affichent aussi la photo', async () => {
+    const images = finder();
+    const { store } = await renderApp({ route: '/suggestions', images });
+    const count = store.getState().recipes.length;
+    await waitFor(() => expect(photos()).toHaveLength(count));
+    cleanup();
+
+    const again = await renderApp({ route: '/planning', images });
+    const id = again.store.getState().recipes[0]!.id;
+    // Le planning s'ouvre sur le jour courant.
+    await act(() => again.store.getState().setPlanEntry(weekdayIndex(), 1, id));
+    await waitFor(() =>
+      expect(screen.getByTestId('slot-1').querySelector('[data-photo] img')?.getAttribute('src')).toMatch(/^https:\/\/img\.test\//),
+    );
   });
 });
 

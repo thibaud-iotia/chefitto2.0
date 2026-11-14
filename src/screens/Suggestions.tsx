@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
-import { DishImage } from '../components/DishImage';
+import { RecipeImage } from '../components/RecipeImage';
 import { useBack } from '../components/hooks';
 import { ChevronLeft } from '../components/icons';
 import { formatTime, haveCount, matchPct, rankBySuggestion, ringTone } from '../domain/logic';
@@ -29,7 +29,7 @@ export default function Suggestions() {
           return (
             <li key={d.id}>
               <Link to={`/recipe/${d.id}`} className={`${s.card} ${s.clickable} ${s.sugItem}`}>
-                <DishImage size={72} style={{ boxShadow: '0 6px 16px rgba(20,20,28,.14)' }} />
+                <RecipeImage recipe={d} size={72} style={{ boxShadow: '0 6px 16px rgba(20,20,28,.14)' }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p className={s.sugName}>{d.name}</p>
                   <p className={s.sugMeta}>

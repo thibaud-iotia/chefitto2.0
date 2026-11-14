@@ -48,6 +48,14 @@ test.describe('import en ligne — données réelles', () => {
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
     await expect(page.getByText(/Source : marmiton\.org/)).toBeVisible();
     await expect(page.locator('dt:text("Temps") + dd')).toHaveText(/^\d+ min$/);
+    // La photo de la page importée est conservée.
+    await expect(page.locator('[data-photo] img')).toHaveAttribute('src', /^https:\/\//);
+  });
+
+  test('les recettes de départ reçoivent une vraie photo, qui se charge', async ({ loggedIn: page }) => {
+    const img = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Mousse au chocolat' }) }).locator('[data-photo] img');
+    await expect(img).toHaveAttribute('src', /^https:\/\/assets\.afcdn\.com\/recipe\/.+_w180h180c1/, NET);
+    await expect.poll(() => img.evaluate((i: HTMLImageElement) => (i.complete ? i.naturalWidth : 0)), NET).toBeGreaterThan(0);
   });
 
   test('« Plus de résultats » charge la page suivante', async ({ loggedIn: page }) => {

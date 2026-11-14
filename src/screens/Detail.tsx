@@ -1,6 +1,6 @@
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
-import { DishImage } from '../components/DishImage';
+import { RecipeImage } from '../components/RecipeImage';
 import { useBack } from '../components/hooks';
 import { ChevronLeft, Heart } from '../components/icons';
 import { formatTime, hasIngredient, haveCount } from '../domain/logic';
@@ -41,7 +41,7 @@ export default function Detail() {
           >
             <Heart filled={fav} size={18} />
           </IconButton>
-          <DishImage size={250} className={s.detailPlate} eager />
+          <RecipeImage recipe={recipe} size={250} className={s.detailPlate} eager />
         </div>
         <div className={s.detailBody}>
           <div>

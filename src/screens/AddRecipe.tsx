@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { DishImage } from '../components/DishImage';
 import { Download } from '../components/icons';
 import { buildRecipeDraft, formatTime } from '../domain/logic';
 import { RECIPE_CATEGORIES } from '../domain/types';
@@ -47,8 +48,9 @@ export default function AddRecipe() {
         </span>
       </Link>
       {form.meta?.source && (
-        <p className={s.importedFrom}>
-          <span>
+        <div className={s.importedFrom}>
+          {form.imageUrl && <DishImage size={40} src={form.imageUrl} onBroken={() => f.set('imageUrl', null)} />}
+          <span style={{ flex: 1 }}>
             Importée depuis{' '}
             <a href={form.meta.source.url} target="_blank" rel="noopener noreferrer">
               {form.meta.source.name}
@@ -58,7 +60,7 @@ export default function AddRecipe() {
           <button type="button" aria-label="Oublier la source importée" onClick={f.clearMeta}>
             ×
           </button>
-        </p>
+        </div>
       )}
       <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <Input label="Nom du plat" placeholder="Pizza maison" value={form.name} onChange={(e) => f.set('name', e.target.value)} />

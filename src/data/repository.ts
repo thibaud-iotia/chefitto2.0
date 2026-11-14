@@ -21,6 +21,8 @@ export interface Repository {
   loadAll(user: User): Promise<UserData>;
   updateProfile(user: User, profile: Profile): Promise<void>;
   addRecipe(user: User, draft: RecipeDraft): Promise<Recipe>;
+  /** Mémorise la photo trouvée automatiquement (`null` : plus de photo valide). */
+  setRecipeImage(user: User, recipeId: string, imageUrl: string | null): Promise<void>;
   setFavorite(user: User, recipeId: string, on: boolean): Promise<void>;
   addFridgeItem(user: User, name: string, category: FoodCategory): Promise<FridgeItem>;
   removeFridgeItem(user: User, id: string): Promise<void>;

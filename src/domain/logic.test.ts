@@ -165,6 +165,15 @@ describe('buildRecipeDraft', () => {
     const res = buildRecipeDraft({ ...EMPTY_FORM, name: 'Risotto', ingredients: '4 verres de riz\n1,5 l de bouillon', steps: ['a'], meta });
     expect(res.ok && res.draft).toMatchObject({ timeMin: 25, level: 'Moyen', price: '€', ingredients: ['4 verres de riz', '1,5 l de bouillon'] });
   });
+  it('reprend la photo importée si elle est sûre', () => {
+    const draft = (imageUrl: string | null) => {
+      const res = buildRecipeDraft({ ...EMPTY_FORM, name: 'X', imageUrl });
+      return res.ok ? res.draft.imageUrl : 'erreur';
+    };
+    expect(draft('https://img.test/a.webp')).toBe('https://img.test/a.webp');
+    expect(draft('javascript:alert(1)')).toBeNull();
+    expect(draft(null)).toBeNull();
+  });
 });
 
 describe('moveItem / removeStep', () => {
