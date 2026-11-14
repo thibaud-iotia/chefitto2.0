@@ -2,6 +2,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { recipeImportApi } from './vite-plugin-recipe-import.ts';
 
 // Base relative : fonctionne sur https://<user>.github.io/<repo>/ sans connaître le nom du repo
 // (le routage passe par le hash, donc toutes les URL restent sous index.html).
@@ -9,6 +10,8 @@ export default defineConfig({
   base: process.env.BASE_PATH ?? './',
   plugins: [
     react(),
+    // `/api/recipe-import` en dev / preview (mode local). En production : Supabase Edge Function.
+    recipeImportApi(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'images/*'],
@@ -46,12 +49,12 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
+    include: ['src/**/*.test.{ts,tsx}', 'supabase/functions/_shared/**/*.test.ts'],
     css: { modules: { classNameStrategy: 'non-scoped' } },
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.{ts,tsx}'],
-      exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/main.tsx', 'src/vite-env.d.ts'],
+      include: ['src/**/*.{ts,tsx}', 'supabase/functions/_shared/**/*.ts'],
+      exclude: ['src/**/*.test.{ts,tsx}', 'supabase/**/*.test.ts', 'src/test/**', 'src/main.tsx', 'src/vite-env.d.ts'],
       thresholds: { lines: 80, functions: 80, branches: 75, statements: 80 },
     },
   },

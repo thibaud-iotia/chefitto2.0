@@ -2,6 +2,7 @@ import { createStore } from 'zustand/vanilla';
 import { capitalize, planKey } from '../domain/logic';
 import type { FoodCategory, FridgeItem, Plan, Profile, Recipe, RecipeDraft, User } from '../domain/types';
 import type { Repository } from '../data/repository';
+import { defaultImporter, type RecipeImporter } from '../data/recipeImport';
 
 export type Sheet = { type: 'pick'; day: number; meal: number } | { type: 'plan'; recipeId: string } | null;
 
@@ -18,6 +19,8 @@ export interface AppState {
   sheet: Sheet;
   /** Bascule vers l'écran d'auth après le splash (sans compte). */
   splashSeen: boolean;
+  /** Recherche / import de recettes en ligne (dépendance, non réactive). */
+  importer: RecipeImporter;
 }
 
 export interface AppActions {
@@ -51,7 +54,7 @@ const EMPTY: Pick<AppState, 'profile' | 'recipes' | 'favorites' | 'fridge' | 'pl
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Erreur inattendue');
 
-export function createAppStore(repo: Repository) {
+export function createAppStore(repo: Repository, importer: RecipeImporter = defaultImporter(repo.mode, () => repo.getAccessToken())) {
   let toastSeq = 0;
   let loading: Promise<void> | null = null;
   let unsubscribe: (() => void) | null = null;
@@ -98,6 +101,7 @@ export function createAppStore(repo: Repository) {
       toast: null,
       sheet: null,
       splashSeen: false,
+      importer,
 
       async init() {
         unsubscribe?.();

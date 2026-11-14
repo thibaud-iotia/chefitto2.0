@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Download } from '../components/icons';
-import { buildRecipeDraft } from '../domain/logic';
+import { buildRecipeDraft, formatTime } from '../domain/logic';
 import { RECIPE_CATEGORIES } from '../domain/types';
 import { useApp } from '../store/storeContext';
-import { Button, Chip, Input } from '../ui';
+import { Button, Chip, Input, TextArea } from '../ui';
 import { useRecipeForm } from './formStore';
 import s from './screens.module.css';
 
@@ -40,12 +40,26 @@ export default function AddRecipe() {
           <span className={s.importTitle} style={{ display: 'block' }}>
             Importer une recette
           </span>
-          <span className={s.importSub}>Partez d'un modèle et ajustez-le</span>
+          <span className={s.importSub}>Cherchez sur Marmiton ou collez un lien</span>
         </span>
         <span aria-hidden="true" style={{ color: 'var(--red-500)', fontWeight: 700 }}>
           ›
         </span>
       </Link>
+      {form.meta?.source && (
+        <p className={s.importedFrom}>
+          <span>
+            Importée depuis{' '}
+            <a href={form.meta.source.url} target="_blank" rel="noopener noreferrer">
+              {form.meta.source.name}
+            </a>{' '}
+            · {formatTime(form.meta.timeMin)} · {form.meta.level}
+          </span>
+          <button type="button" aria-label="Oublier la source importée" onClick={f.clearMeta}>
+            ×
+          </button>
+        </p>
+      )}
       <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <Input label="Nom du plat" placeholder="Pizza maison" value={form.name} onChange={(e) => f.set('name', e.target.value)} />
         <div className={s.wrap} role="group" aria-label="Catégorie">
@@ -55,9 +69,11 @@ export default function AddRecipe() {
             </Chip>
           ))}
         </div>
-        <Input
-          label="Ingrédients (séparés par des virgules)"
+        <TextArea
+          label="Ingrédients"
+          hint="Un par ligne, ou séparés par des virgules"
           placeholder="Tomate, mozzarella, basilic"
+          rows={Math.min(8, Math.max(2, form.ingredients.split('\n').length))}
           value={form.ingredients}
           onChange={(e) => f.set('ingredients', e.target.value)}
         />

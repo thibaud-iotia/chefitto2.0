@@ -2,6 +2,7 @@ import {
   FOOD_CATEGORIES,
   type FoodCategory,
   type FridgeItem,
+  type Level,
   type Plan,
   type Recipe,
   type RecipeCategory,
@@ -131,19 +132,29 @@ export function weekdayIndex(date: Date = new Date()): number {
 
 /* ---------- Formulaire nouvelle recette ---------- */
 
+/** Infos reprises d'une recette importée, non éditées dans le formulaire. */
+export interface ImportMeta {
+  timeMin: number;
+  level: Level;
+  price: string;
+  source: { name: string; url: string } | null;
+}
+
 export interface RecipeForm {
   name: string;
   category: RecipeCategory;
   ingredients: string;
   description: string;
   steps: string[];
+  meta: ImportMeta | null;
 }
 
-export const EMPTY_FORM: RecipeForm = { name: '', category: 'Plats', ingredients: '', description: '', steps: [''] };
+export const EMPTY_FORM: RecipeForm = { name: '', category: 'Plats', ingredients: '', description: '', steps: [''], meta: null };
 
+/** Un élément par ligne si le texte en contient plusieurs (recettes importées, « 1,5 l de lait »), sinon séparés par des virgules. */
 export function splitList(s: string): string[] {
   return s
-    .split(',')
+    .split(/\r?\n/.test(s.trim()) ? /\r?\n/ : ',')
     .map((x) => x.trim())
     .filter(Boolean);
 }
@@ -160,9 +171,9 @@ export function buildRecipeDraft(form: RecipeForm): DraftResult {
     draft: {
       name,
       category: form.category,
-      price: '—',
-      timeMin: Math.max(10, steps.length * 10),
-      level: 'Facile',
+      price: form.meta?.price ?? '—',
+      timeMin: form.meta?.timeMin ?? Math.max(10, steps.length * 10),
+      level: form.meta?.level ?? 'Facile',
       description: form.description.trim() || 'Ma recette.',
       ingredients: ingredients.length ? ingredients : ['—'],
       steps: steps.length ? steps : ['Bon appétit !'],

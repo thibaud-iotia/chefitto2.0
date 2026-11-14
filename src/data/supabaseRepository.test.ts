@@ -75,7 +75,7 @@ describe('SupabaseRepository — auth', () => {
     const sbUser = { id: 'u1', email: 'toto@cuisine.fr' };
     const unsubscribe = vi.fn();
     const auth = {
-      getSession: vi.fn().mockResolvedValue({ data: { session: { user: sbUser } } }),
+      getSession: vi.fn().mockResolvedValue({ data: { session: { user: sbUser, access_token: 'jwt-123' } } }),
       signInWithPassword: vi.fn().mockResolvedValue({ data: { user: sbUser }, error: null }),
       signUp: vi.fn().mockResolvedValue({ data: { user: sbUser, session: null }, error: null }),
       signOut: vi.fn().mockResolvedValue({ error: null }),
@@ -88,6 +88,7 @@ describe('SupabaseRepository — auth', () => {
     };
     const repo = new SupabaseRepository(fakeClient({}, auth).client);
     expect(await repo.getUser()).toEqual(user);
+    expect(await repo.getAccessToken()).toBe('jwt-123');
     expect(await repo.signIn(' toto@cuisine.fr ', 'pw')).toEqual(user);
     expect(auth.signInWithPassword).toHaveBeenCalledWith({ email: 'toto@cuisine.fr', password: 'pw' });
     expect(await repo.signUp('toto@cuisine.fr', 'pw')).toBeNull(); // confirmation requise

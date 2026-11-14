@@ -26,11 +26,16 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 | 12 | Image plat en WebP + fallback PNG + illustration | Le PNG d'origine fait 700 Ko ; budget 150 Ko/image. |
 | 13 | Wake Lock en mode cuisine | L'écran reste allumé pendant qu'on cuisine. |
 | 14 | Base Vite relative (`./`) | Marche quel que soit le nom du repo GitHub. |
+| 15 | Import en ligne via **proxy** : Supabase Edge Function `recipe-import` (prod) + middleware Vite `/api/recipe-import` (dev/preview/e2e), code commun `supabase/functions/_shared/recipeScraper.ts` | GitHub Pages est statique et Marmiton ne permet pas le CORS. Un seul code testé, exécuté par Deno et Node. Fonction réservée aux utilisateurs connectés (rôle JWT `authenticated`). |
+| 16 | Recherche = parsing HTML Marmiton ; import = JSON-LD `schema.org/Recipe` | Le JSON-LD est publié par quasiment tous les sites de recettes (SEO Google) : un seul parseur couvre Marmiton, 750g, CuisineAZ… Regex plutôt que DOM : pas de dépendance, même code Deno/Node. |
+| 17 | Garde-fou SSRF : http(s) publics, pas d'IP littérale ni de nom local, port standard, redirections revérifiées, 10 s / 3 Mo max | Le proxy accepte des URL saisies par l'utilisateur. |
+| 18 | Ingrédients : un par ligne (virgules acceptées si une seule ligne) | Les ingrédients importés contiennent des virgules (« 1,5 l de lait »). |
 
 ## Tests
 
 - **Unitaires** : Vitest + Testing Library (`npm test`). Domaine, store, composants UI, écrans.
-- **E2E** : Playwright, viewport iPhone (`npm run e2e`), en mode `local` (pas de réseau).
+- **E2E** : Playwright, viewport iPhone (`npm run e2e`), en mode `local` (pas de réseau ; API d'import simulée par `page.route`).
+- **E2E live** (`npm run e2e:live`) : import sur vraies pages Marmiton / 750g via le middleware Vite (recherche, pagination, lien collé, page sans recette, axe, contrat API, SSRF). Job CI non bloquant.
 - **Performance** : Lighthouse CI (`npm run perf`) avec budgets (perf ≥ 0.9, a11y ≥ 0.9, LCP < 2.5 s, CLS < 0.1)
   + budget de taille de bundle (`npm run size`).
 - **CI** GitHub Actions : lint → typecheck → unit → build → e2e → lighthouse → déploiement Pages.
@@ -60,7 +65,7 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
 | Frigo | `#/fridge` | ☑ |
 | Suggestions | `#/suggestions` | ☑ |
 | Nouvelle recette | `#/add` | ☑ |
-| Importer | `#/add/import` | ☑ |
+| Importer (recherche Marmiton + lien) | `#/add/import` | ☑ |
 | Profil | `#/profile` | ☑ |
 | Bottom sheet + toast | global | ☑ |
 
@@ -83,6 +88,8 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
 - [ ] Dans Supabase › Auth › URL configuration : ajouter l'URL GitHub Pages.
 - [ ] Secrets GitHub du repo : `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 - [ ] GitHub › Settings › Pages › Source : « GitHub Actions ».
+- [ ] Déployer la fonction d'import : `npx supabase functions deploy recipe-import --project-ref <ref> --use-api`
+      (ou secrets `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_REF` pour le déploiement auto en CI).
 
 ## Journal
 
@@ -90,9 +97,16 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
 - 2026-11-14 : V1 complète. 75 tests unitaires/intégration (98,7 % lignes), 28 E2E (iPhone + Android,
   axe 0 violation, hors-ligne OK), Lighthouse mobile perf 100 / a11y 100 / best-practices 100,
   LCP 1,4 s, CLS 0,013. JS initial 98 KiB gzip.
+- 2026-11-14 : import de recettes réel (remplace les 3 modèles simulés, conservés en « Idées rapides »).
+  Recherche Marmiton pendant la saisie (anti-rebond 350 ms, annulation, pagination, cache 5 min),
+  import par lien (JSON-LD), temps/niveau/coût/source repris. 141 tests unitaires (97,5 % lignes),
+  32 E2E hors réseau, 8 E2E live sur vraies données. Edge Function vérifiée sous Deno 2. JS initial 100,5 KiB.
 
 ## Pistes V2
 
 - Photos par recette (Supabase Storage) au lieu de l'image unique de la maquette.
 - Suppression / édition de recette, liste de courses générée depuis les « À acheter ».
 - Planning multi-semaines (actuellement une semaine type).
+- Garder la photo des recettes importées (`imageUrl` déjà renvoyé par l'import) une fois les photos par recette en place.
+- Web Share Target (PWA) : « Partager › Chefitto » depuis Marmiton ouvre directement l'import du lien.
+- Limitation de débit sur l'Edge Function si l'app est ouverte à d'autres utilisateurs.

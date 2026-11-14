@@ -8,6 +8,7 @@ describe('LocalRepository', () => {
     await repo.addFridgeItem(u1, 'Kiwi', 'Fruit');
     await repo.signOut();
     expect(await repo.getUser()).toBeNull();
+    expect(await repo.getAccessToken()).toBeNull();
     const u2 = await repo.signUp('toto@cuisine.fr');
     expect(u2.id).toBe(u1.id);
     expect((await repo.loadAll(u2)).fridge[0]!.name).toBe('Kiwi');

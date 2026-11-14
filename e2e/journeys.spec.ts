@@ -52,6 +52,59 @@ test('créer une recette depuis un modèle importé', async ({ loggedIn: page })
   await expect(page.getByText('Boeuf haché')).toBeVisible();
 });
 
+test('rechercher en ligne et importer une recette (API simulée)', async ({ loggedIn: page }) => {
+  // Réponses figées : ce parcours ne dépend pas du réseau (les vraies données : live.spec.ts).
+  const calls: string[] = [];
+  await page.route('**/api/recipe-import**', async (route) => {
+    const url = new URL(route.request().url());
+    calls.push(url.search);
+    if (url.searchParams.get('url')) {
+      return route.fulfill({
+        json: {
+          recipe: {
+            name: 'Gratin dauphinois',
+            category: 'Plats',
+            timeMin: 75,
+            level: 'Moyen',
+            price: '€',
+            description: 'Pour 6 personnes. Source : marmiton.org.',
+            ingredients: ['1,5 kg de pommes de terre', '50 cl de crème', '2 gousses d’ail'],
+            steps: ['Éplucher les pommes de terre.', 'Napper de crème.', 'Cuire 1 h 15.'],
+            servings: '6 personnes',
+            imageUrl: null,
+            sourceUrl: 'https://www.marmiton.org/recettes/recette_gratin-dauphinois_1.aspx',
+            sourceName: 'marmiton.org',
+          },
+        },
+      });
+    }
+    return route.fulfill({
+      json: {
+        page: 1,
+        hasMore: false,
+        results: [
+          { url: 'https://www.marmiton.org/recettes/recette_gratin-dauphinois_1.aspx', name: 'Gratin dauphinois', imageUrl: null, rating: 4.8, reviews: 1200, category: 'Accompagnement', source: 'marmiton.org' },
+        ],
+      },
+    });
+  });
+
+  await page.getByRole('button', { name: 'Ajouter une recette' }).click();
+  await page.getByRole('link', { name: /Importer une recette/ }).click();
+  await page.getByRole('searchbox').pressSequentially('gratin', { delay: 30 });
+  await page.getByRole('list', { name: 'Résultats Marmiton' }).getByRole('button', { name: /Gratin dauphinois/ }).click();
+  await expect(page.getByText('Recette importée')).toBeVisible();
+  expect(calls).toHaveLength(2); // une recherche (anti-rebond) + un import
+  await expect(page.getByLabel('Ingrédients')).toHaveValue('1,5 kg de pommes de terre\n50 cl de crème\n2 gousses d’ail');
+  await page.getByRole('button', { name: 'Ajouter la recette' }).click();
+
+  await page.getByRole('tab', { name: 'Plats' }).click();
+  await page.getByRole('link', { name: 'Gratin dauphinois' }).click();
+  await expect(page.getByText('1,5 kg de pommes de terre')).toBeVisible();
+  await expect(page.locator('dt:text("Temps") + dd')).toHaveText('75 min');
+  await expect(page.locator('dt:text("Niveau") + dd')).toHaveText('Moyen');
+});
+
 test('favoris et déconnexion / reconnexion', async ({ loggedIn: page }) => {
   await page.getByRole('button', { name: 'Ajouter Mousse au chocolat aux favoris' }).click();
   await page.getByRole('tab', { name: /Favoris/ }).click();

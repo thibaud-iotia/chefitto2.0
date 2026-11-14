@@ -140,6 +140,23 @@
   /* 16px minimum : évite le zoom auto d'iOS au focus */
   font-size: 16px;
 }
+.controlMulti {
+  align-items: stretch;
+  padding: 10px 14px;
+}
+.control textarea {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: vertical;
+  color: var(--text-heading);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.45;
+}
+.control textarea::placeholder,
 .control input::placeholder {
   color: var(--gray-500);
 }

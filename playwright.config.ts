@@ -1,5 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
+/**
+ * Projets :
+ * - `iphone` / `android` : parcours complets, hors réseau (mode local, API d'import simulée) → `npm run e2e`.
+ * - `live` : import sur de vraies pages (Marmiton, 750g) via le middleware Vite → `npm run e2e:live`.
+ *   Séquentiel et sur un seul appareil pour rester sobre envers les sites sources.
+ */
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -12,8 +18,16 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [
-    { name: 'iphone', use: { ...devices['iPhone 15'], browserName: 'chromium' } },
-    { name: 'android', use: { ...devices['Pixel 7'] } },
+    { name: 'iphone', testIgnore: /live\.spec\.ts/, use: { ...devices['iPhone 15'], browserName: 'chromium' } },
+    { name: 'android', testIgnore: /live\.spec\.ts/, use: { ...devices['Pixel 7'] } },
+    {
+      name: 'live',
+      testMatch: /live\.spec\.ts/,
+      fullyParallel: false,
+      retries: 1,
+      timeout: 90_000,
+      use: { ...devices['iPhone 15'], browserName: 'chromium', trace: 'retain-on-failure' },
+    },
   ],
   webServer: {
     command: 'npm run build && npm run preview',

@@ -1,4 +1,4 @@
-import { useId, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
+import { useId, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { initials } from '../domain/logic';
 import s from './ui.module.css';
 
@@ -56,6 +56,32 @@ export function Input({ label, hint, error, size = 'md', leftIcon, id, className
       {(error || hint) && (
         <span id={msgId} className={error ? s.error : s.hint} role={error ? 'alert' : undefined}>
           {error || hint}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* ---------- TextArea ---------- */
+export interface TextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label: string;
+  hint?: string;
+}
+export function TextArea({ label, hint, id, className, rows = 3, ...rest }: TextAreaProps) {
+  const auto = useId();
+  const inputId = id ?? auto;
+  const msgId = `${inputId}-msg`;
+  return (
+    <div className={cx(s.field, className)}>
+      <label htmlFor={inputId} className={s.label}>
+        {label}
+      </label>
+      <div className={cx(s.control, s.controlMulti)}>
+        <textarea id={inputId} rows={rows} aria-describedby={hint ? msgId : undefined} {...rest} />
+      </div>
+      {hint && (
+        <span id={msgId} className={s.hint}>
+          {hint}
         </span>
       )}
     </div>

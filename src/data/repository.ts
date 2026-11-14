@@ -14,6 +14,8 @@ export interface Repository {
   signUp(email: string, password: string): Promise<User | null>;
   signOut(): Promise<void>;
   resetPassword(email: string): Promise<void>;
+  /** Jeton d'accès de la session (appel des Edge Functions) ; `null` en mode local. */
+  getAccessToken(): Promise<string | null>;
 
   /** Charge toutes les données ; insère les recettes de départ au premier appel. */
   loadAll(user: User): Promise<UserData>;

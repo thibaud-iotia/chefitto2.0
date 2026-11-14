@@ -119,6 +119,8 @@ describe('helpers', () => {
     expect(initials('Toto  Lacuisine Chef')).toBe('TL');
     expect(initials('')).toBe('');
     expect(splitList(' a, ,b ,c')).toEqual(['a', 'b', 'c']);
+    // Une ligne par élément : les virgules internes (« 1,5 l ») sont conservées.
+    expect(splitList('1,5 l de lait\r\n\n sel, poivre \n')).toEqual(['1,5 l de lait', 'sel, poivre']);
   });
 });
 
@@ -157,6 +159,11 @@ describe('buildRecipeDraft', () => {
     const res = buildRecipeDraft({ ...EMPTY_FORM, name: 'X', ingredients: 'a, b', steps: ['1', '2', '3'] });
     expect(res.ok && res.draft.timeMin).toBe(30);
     expect(res.ok && res.draft.ingredients).toEqual(['a', 'b']);
+  });
+  it('reprend temps, niveau et prix d’une recette importée', () => {
+    const meta = { timeMin: 25, level: 'Moyen' as const, price: '€', source: { name: 'marmiton.org', url: 'https://www.marmiton.org/x' } };
+    const res = buildRecipeDraft({ ...EMPTY_FORM, name: 'Risotto', ingredients: '4 verres de riz\n1,5 l de bouillon', steps: ['a'], meta });
+    expect(res.ok && res.draft).toMatchObject({ timeMin: 25, level: 'Moyen', price: '€', ingredients: ['4 verres de riz', '1,5 l de bouillon'] });
   });
 });
 

@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures';
 
-const SCREENS = ['/home', '/fridge', '/planning', '/suggestions', '/add', '/profile'];
+const SCREENS = ['/home', '/fridge', '/planning', '/suggestions', '/add', '/add/import', '/profile'];
 
 test.describe('accessibilité (axe, WCAG 2.1 AA)', () => {
   test('splash et auth', async ({ page }) => {

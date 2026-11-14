@@ -74,6 +74,10 @@ export class LocalRepository implements Repository {
     write(dataKey(user.id), d);
   }
 
+  async getAccessToken(): Promise<string | null> {
+    return null;
+  }
+
   async getUser(): Promise<User | null> {
     return read<User>(SESSION_KEY);
   }

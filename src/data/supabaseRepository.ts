@@ -67,6 +67,11 @@ export class SupabaseRepository implements Repository {
     return data.session?.user ? toUser(data.session.user) : null;
   }
 
+  async getAccessToken(): Promise<string | null> {
+    const { data } = await this.sb.auth.getSession();
+    return data.session?.access_token ?? null;
+  }
+
   onAuthChange(cb: (user: User | null) => void): () => void {
     const { data } = this.sb.auth.onAuthStateChange((_event, session) => cb(session?.user ? toUser(session.user) : null));
     return () => data.subscription.unsubscribe();

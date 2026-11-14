@@ -1,5 +1,5 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderApp } from '../test/renderApp';
 
 describe('Splash & Auth', () => {
@@ -240,15 +240,162 @@ describe('Nouvelle recette & import', () => {
   });
 
   it('importe un modèle dans le formulaire', async () => {
+    stubImportApi();
     const { user } = await renderApp({ route: '/add' });
     await user.click(screen.getByRole('link', { name: /Importer une recette/ }));
-    await user.type(screen.getByRole('searchbox'), 'xyz');
-    expect(screen.getByText(/Aucun modèle/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Idées rapides' })).toBeInTheDocument();
+    await user.type(screen.getByRole('searchbox'), 'x');
+    expect(screen.getByText(/Tapez au moins 2 lettres/)).toBeInTheDocument();
+    await user.type(screen.getByRole('searchbox'), 'yz');
+    expect(await screen.findByText('Aucune recette trouvée sur Marmiton pour « xyz ».')).toBeInTheDocument();
     await user.clear(screen.getByRole('searchbox'));
     await user.type(screen.getByRole('searchbox'), 'taco');
+    expect(screen.getByRole('heading', { name: 'Modèles' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Tacos/ }));
     expect(await screen.findByLabelText('Nom du plat')).toHaveValue('Tacos');
+    expect(screen.getByLabelText('Ingrédients')).toHaveValue('Tortilla\nPoulet\nOignon\nFromage');
     expect(screen.getByLabelText('Étape 3')).toHaveValue('Gratinez');
+  });
+});
+
+/* ---------- Import en ligne (API simulée ; les vraies données sont couvertes par e2e/live.spec.ts) ---------- */
+
+const RESULT = (n: number, name: string) => ({
+  url: `https://www.marmiton.org/recettes/recette_${n}.aspx`,
+  name,
+  imageUrl: n === 1 ? 'https://assets.afcdn.com/recipe/1.webp' : null,
+  rating: n === 1 ? 4.6 : null,
+  reviews: n === 1 ? 104 : null,
+  category: 'Plat principal',
+  source: 'marmiton.org',
+});
+
+const IMPORTED = {
+  name: 'Risotto au chorizo',
+  category: 'Plats',
+  timeMin: 25,
+  level: 'Moyen',
+  price: '€',
+  description: 'Pour 4 personnes. Source : marmiton.org, par milou.g.',
+  ingredients: ['4 verres de riz', '1,5 l de bouillon', 'chorizo'],
+  steps: ['Faire bouillir le bouillon.', 'Ajouter le riz.'],
+  servings: '4 personnes',
+  imageUrl: null,
+  sourceUrl: 'https://www.marmiton.org/recettes/recette_1.aspx',
+  sourceName: 'marmiton.org',
+};
+
+type Handler = (params: URLSearchParams) => { status?: number; body: unknown } | Promise<never>;
+
+/** Remplace `fetch` : simule `/api/recipe-import` (middleware Vite / Edge Function). */
+function stubImportApi(handler: Handler = () => ({ body: { results: [], page: 1, hasMore: false } })) {
+  const fetchMock = vi.fn(async (input: string) => {
+    const r = await handler(new URL(input).searchParams);
+    return new Response(JSON.stringify(r.body), { status: r.status ?? 200, headers: { 'content-type': 'application/json' } });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
+describe('Import en ligne', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('cherche sur Marmiton pendant la saisie, pagine, importe puis enregistre', async () => {
+    const fetchMock = stubImportApi((p) => {
+      if (p.get('url')) return { body: { recipe: IMPORTED } };
+      return p.get('page') === '2'
+        ? { body: { results: [RESULT(2, 'Risotto aux cèpes'), RESULT(3, 'Risotto au potiron')], page: 2, hasMore: false } }
+        : { body: { results: [RESULT(1, 'Risotto au chorizo'), RESULT(2, 'Risotto aux cèpes')], page: 1, hasMore: true } };
+    });
+    const { user, store } = await renderApp({ route: '/add' });
+    await user.click(screen.getByRole('link', { name: /Importer une recette/ }));
+    await user.type(screen.getByRole('searchbox'), 'risotto');
+
+    const results = await screen.findByRole('list', { name: 'Résultats Marmiton' });
+    expect(await within(results).findByRole('button', { name: /Risotto au chorizo/ })).toHaveTextContent('★ 4,6 · 104 avis · Plat principal');
+    // Anti-rebond : une seule requête pour toute la saisie.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]![0]).toContain('q=risotto');
+    expect(screen.getByText('2 recette(s) trouvée(s) sur Marmiton')).toHaveAttribute('aria-live', 'polite');
+
+    await user.click(screen.getByRole('button', { name: 'Plus de résultats' }));
+    expect(await within(results).findByRole('button', { name: /Risotto au potiron/ })).toBeInTheDocument();
+    expect(within(results).getAllByRole('button')).toHaveLength(3); // doublon fusionné
+    expect(screen.queryByRole('button', { name: 'Plus de résultats' })).not.toBeInTheDocument();
+
+    await user.click(within(results).getByRole('button', { name: /Risotto au chorizo/ }));
+    expect(await screen.findByText('Recette importée')).toBeInTheDocument();
+    expect(screen.getByLabelText('Nom du plat')).toHaveValue('Risotto au chorizo');
+    expect(screen.getByLabelText('Ingrédients')).toHaveValue('4 verres de riz\n1,5 l de bouillon\nchorizo');
+    expect(screen.getByLabelText('Étape 2')).toHaveValue('Ajouter le riz.');
+    expect(screen.getByRole('link', { name: 'marmiton.org' })).toHaveAttribute('href', IMPORTED.sourceUrl);
+    expect(screen.getByText(/25 min · Moyen/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Ajouter la recette' }));
+    expect(await screen.findByText('Recette ajoutée')).toBeInTheDocument();
+    expect(store.getState().recipes[0]).toMatchObject({
+      name: 'Risotto au chorizo',
+      timeMin: 25,
+      level: 'Moyen',
+      price: '€',
+      ingredients: ['4 verres de riz', '1,5 l de bouillon', 'chorizo'],
+      description: IMPORTED.description,
+    });
+  });
+
+  it('importe depuis un lien collé (touche Entrée) et permet d’oublier la source', async () => {
+    const fetchMock = stubImportApi((p) => ({
+      body: { recipe: { ...IMPORTED, name: 'Pâte pour crêpes', category: 'Desserts', sourceName: '750g.com', sourceUrl: p.get('url') } },
+    }));
+    const { user, store } = await renderApp({ route: '/add/import' });
+    await user.type(screen.getByRole('searchbox'), 'www.750g.com/pate-a-crepes-r17175.htm');
+    expect(screen.getByRole('button', { name: /Importer depuis 750g\.com/ })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Idées rapides' })).not.toBeInTheDocument();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByLabelText('Nom du plat')).toHaveValue('Pâte pour crêpes');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(new URL(fetchMock.mock.calls[0]![0]).searchParams.get('url')).toBe('https://www.750g.com/pate-a-crepes-r17175.htm');
+    expect(screen.getByRole('button', { name: 'Desserts' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(screen.getByRole('button', { name: 'Oublier la source importée' }));
+    expect(screen.queryByText(/Importée depuis/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Ajouter la recette' }));
+    await screen.findByText('Recette ajoutée');
+    expect(store.getState().recipes[0]).toMatchObject({ name: 'Pâte pour crêpes', price: '—', level: 'Facile' });
+  });
+
+  it('affiche les erreurs de recherche, réessaie, et signale un import impossible', async () => {
+    let fail = true;
+    stubImportApi((p) => {
+      if (p.get('url')) return { status: 422, body: { error: 'Aucune recette trouvée sur cette page' } };
+      if (fail) return { status: 502, body: { error: 'Le site source est injoignable' } };
+      return { body: { results: [RESULT(1, 'Tarte au citron')], page: 1, hasMore: false } };
+    });
+    const { user } = await renderApp({ route: '/add/import' });
+    await user.type(screen.getByRole('searchbox'), 'tarte');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Le site source est injoignable');
+    fail = false;
+    await user.click(screen.getByRole('button', { name: 'Réessayer' }));
+    const item = await screen.findByRole('button', { name: /Tarte au citron/ });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    await user.click(item);
+    expect(await screen.findByText('Aucune recette trouvée sur cette page')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Importer une recette' })).toBeInTheDocument();
+    expect(item).toBeEnabled();
+  });
+
+  it('service injoignable : message clair, les modèles restent utilisables', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+    const { user } = await renderApp({ route: '/add/import' });
+    await user.type(screen.getByRole('searchbox'), 'lasagnes');
+    expect(await screen.findByRole('alert')).toHaveTextContent(/injoignable/);
+    expect(screen.getByRole('button', { name: /Lasagnes/ })).toBeEnabled();
   });
 });
 

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ImportedRecipe } from '../data/recipeImport';
 import { EMPTY_FORM, moveItem, removeStep, type RecipeForm } from '../domain/logic';
 import type { ImportTemplate, RecipeCategory } from '../domain/types';
 
@@ -11,6 +12,9 @@ interface FormState {
   moveStep(i: number, dir: -1 | 1): void;
   removeStep(i: number): void;
   importTemplate(t: ImportTemplate): void;
+  importRecipe(r: ImportedRecipe): void;
+  /** Oublie la source importée (temps, niveau, prix repassent aux valeurs par défaut). */
+  clearMeta(): void;
   reset(category?: RecipeCategory): void;
 }
 
@@ -23,7 +27,26 @@ export const useRecipeForm = create<FormState>((set) => ({
   removeStep: (i) => set((s) => ({ form: { ...s.form, steps: removeStep(s.form.steps, i) } })),
   importTemplate: (t) =>
     set((s) => ({
-      form: { ...s.form, name: t.name, category: t.category, ingredients: t.ingredients.join(', '), steps: [...t.steps] },
+      form: {
+        ...s.form,
+        name: t.name,
+        category: t.category,
+        ingredients: t.ingredients.join('\n'),
+        steps: [...t.steps],
+        meta: { timeMin: t.timeMin, level: 'Facile', price: '—', source: null },
+      },
     })),
+  importRecipe: (r) =>
+    set({
+      form: {
+        name: r.name,
+        category: r.category,
+        ingredients: r.ingredients.join('\n'),
+        description: r.description,
+        steps: r.steps.length ? [...r.steps] : [''],
+        meta: { timeMin: r.timeMin, level: r.level, price: r.price, source: { name: r.sourceName, url: r.sourceUrl } },
+      },
+    }),
+  clearMeta: () => set((s) => ({ form: { ...s.form, meta: null } })),
   reset: (category) => set({ form: { ...EMPTY_FORM, category: category ?? EMPTY_FORM.category } }),
 }));
