@@ -1,27 +1,24 @@
-// Génère les icônes PWA / Apple à partir de public/favicon.svg,
-// et une version WebP optimisée de public/images/dish1.png si présente.
+// Génère les icônes PWA / Apple à partir de public/icon.svg (carré plein, sans coins arrondis :
+// iOS et Android appliquent eux-mêmes leur masque), et une version WebP optimisée de
+// public/images/dish1.png si présente. public/favicon.svg = même dessin, coins arrondis (onglet navigateur).
 // Usage : node scripts/gen-assets.mjs
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 
-const svg = await readFile('public/favicon.svg');
+const svg = await readFile('public/icon.svg');
 
-// Fond plein (pas de transparence) : iOS remplit sinon en noir.
-async function icon(size, out, { maskable = false } = {}) {
-  const pad = maskable ? Math.round(size * 0.1) : 0;
-  const inner = await sharp(svg, { density: 1024 }).resize(size - pad * 2, size - pad * 2).png().toBuffer();
-  await sharp({ create: { width: size, height: size, channels: 4, background: '#F5254A' } })
-    .composite([{ input: inner, left: pad, top: pad }])
-    .png()
-    .toFile(out);
+// Le dessin tient dans la zone sûre « maskable » (cercle de 80 %) : même source pour toutes les tailles.
+// flatten() : aucune transparence, sinon iOS remplit en noir.
+async function icon(size, out) {
+  await sharp(svg, { density: 1024 }).resize(size, size).flatten({ background: '#F5254A' }).png({ compressionLevel: 9 }).toFile(out);
   console.log('✓', out);
 }
 
+await icon(180, 'public/apple-touch-icon.png');
 await icon(192, 'public/icons/icon-192.png');
 await icon(512, 'public/icons/icon-512.png');
-await icon(512, 'public/icons/icon-maskable-512.png', { maskable: true });
-await icon(180, 'public/apple-touch-icon.png');
+await icon(512, 'public/icons/icon-maskable-512.png');
 
 if (existsSync('public/images/dish1.png')) {
   await sharp('public/images/dish1.png')

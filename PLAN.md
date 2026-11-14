@@ -35,6 +35,7 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 | 21 | Photo cassée (`onerror`) → nouvelle recherche en excluant l'URL, sinon illustration | Les liens tiers peuvent disparaître ; l'app se répare seule. |
 | 22 | Vignettes redimensionnées par le CDN Marmiton (`_w{n}h{n}c1`, `srcset` 1x/2x/3x) ; cache SW `recipe-images` (CacheFirst, 150 entrées, 30 j) | 10 Ko au lieu de 70 Ko par carte ; photos visibles hors ligne. `referrerPolicy=no-referrer`. |
 | 23 | `image_url` filtrée (https, ≤ 2048, sans identifiants) côté client **et** par contrainte SQL ; insert sans la colonne si absente | Données tierces affichées ; front déployable avant la migration SQL. |
+| 24 | **Icône** = toque de chef blanche en tracés vectoriels sur dégradé rouge ; source `public/icon.svg` carrée pleine (sans coins arrondis), `favicon.svg` = même dessin arrondi ; PNG via `node scripts/gen-assets.mjs` ; lien `apple-touch-icon` versionné (`?v=2`) | iOS applique son propre masque (l'ancienne icône montrait un double arrondi) ; pas de texte = pas de dépendance à une police absente de sharp ; iOS garde l'ancienne icône en cache sans changement d'URL. |
 
 ## Tests
 
