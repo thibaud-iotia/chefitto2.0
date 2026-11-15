@@ -78,14 +78,6 @@ ou trouvée automatiquement par nom sur Marmiton, via la fonction d'import).
    `FRIDGE_SCAN_PER_HOUR`). Les photos sont réduites à 1568 px et recompressées en JPEG sur le
    téléphone (métadonnées GPS supprimées) ; elles ne sont pas stockées. En dev : `ANTHROPIC_API_KEY`
    dans `.env.local`.
-8. **Fonction de test des paroles** (page `#/test` : scraping Genius vs API LRCLIB, prototype) :
-
-   ```bash
-   npx supabase functions deploy lyrics --project-ref <ref-du-projet> --use-api
-   ```
-
-   Réservée aux utilisateurs connectés. Sert à vérifier si Genius accepte les requêtes venant des
-   serveurs Supabase (Cloudflare bloque souvent les IP de datacenter). En dev : middleware Vite `/api/lyrics`.
 
 ### 3. GitHub
 

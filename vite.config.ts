@@ -3,7 +3,6 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fridgeScanApi } from './vite-plugin-fridge-scan.ts';
-import { lyricsApi } from './vite-plugin-lyrics.ts';
 import { recipeImportApi } from './vite-plugin-recipe-import.ts';
 
 // Base relative : fonctionne sur https://<user>.github.io/<repo>/ sans connaître le nom du repo
@@ -14,8 +13,6 @@ export default defineConfig(({ mode }) => ({
     react(),
     // `/api/recipe-import` en dev / preview (mode local). En production : Supabase Edge Function.
     recipeImportApi(),
-    // `/api/lyrics` en dev / preview : page de test `#/test` (scraping Genius vs API LRCLIB).
-    lyricsApi(),
     // `/api/fridge-scan` en dev / preview. Clé serveur lue dans .env.local (sans préfixe VITE_ : jamais dans le bundle).
     fridgeScanApi(loadEnv(mode, process.cwd(), '').ANTHROPIC_API_KEY),
     VitePWA({

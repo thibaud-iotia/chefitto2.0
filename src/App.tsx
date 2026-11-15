@@ -13,7 +13,6 @@ import Detail from './screens/Detail';
 import Fridge from './screens/Fridge';
 import Home from './screens/Home';
 import ImportRecipe from './screens/ImportRecipe';
-import LyricsTest from './screens/LyricsTest';
 import Planning from './screens/Planning';
 import Profile from './screens/Profile';
 import Splash from './screens/Splash';
@@ -27,9 +26,6 @@ export default function App({ demo = false }: { demo?: boolean }) {
     useShallow((st) => ({ status: st.status, error: st.error, splashSeen: st.splashSeen, reload: st.reload, signOut: st.signOut })),
   );
   const { pathname } = useLocation();
-
-  // Page de test (paroles Genius / LRCLIB) : accessible connecté ou non, en dev / preview.
-  if (pathname === '/test') return <Frame>{<LyricsTest />}</Frame>;
 
   if (status === 'booting') return <Frame>{<Loader />}</Frame>;
 
