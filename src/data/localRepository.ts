@@ -154,6 +154,15 @@ export class LocalRepository implements Repository {
     return item;
   }
 
+  async addFridgeItems(user: User, items: readonly { name: string; category: FoodCategory }[]): Promise<FridgeItem[]> {
+    await this.tick();
+    const created = items.map((i) => ({ id: uid(), name: i.name, category: i.category }));
+    this.mutate(user, (d) => {
+      d.fridge.unshift(...created);
+    });
+    return created;
+  }
+
   async removeFridgeItem(user: User, id: string): Promise<void> {
     await this.tick();
     this.mutate(user, (d) => {

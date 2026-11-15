@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseRepository, toRecipe, toRecipeRow } from './supabaseRepository';
 import { friendlyAuthError } from './repository';
 import { SEED_RECIPES } from '../domain/seed';
+import type { FridgeItem } from '../domain/types';
 
 /**
  * Faux client Supabase : chaque appel `from(table)` renvoie un builder chaînable
@@ -160,6 +161,19 @@ describe('SupabaseRepository — données', () => {
     const data = await new SupabaseRepository(client).loadAll(user);
     expect(data.profile.name).toBe('toto');
     expect(calls.some((c) => c.table === 'recipes' && c.ops.some(([op]) => op === 'insert'))).toBe(false);
+  });
+
+  it('ajout groupé d’aliments en une requête', async () => {
+    const created: FridgeItem[] = [
+      { id: 'a', name: 'Lait', category: 'Autre' },
+      { id: 'b', name: 'Poulet', category: 'Viande' },
+    ];
+    const { client, calls } = fakeClient({ fridge_items: [{ data: created, error: null }] });
+    const repo = new SupabaseRepository(client);
+    expect(await repo.addFridgeItems(user, [])).toEqual([]);
+    expect(calls).toHaveLength(0);
+    expect(await repo.addFridgeItems(user, created.map(({ name, category }) => ({ name, category })))).toEqual(created);
+    expect(calls[0]!.ops[0]).toEqual(['insert', [[{ name: 'Lait', category: 'Autre' }, { name: 'Poulet', category: 'Viande' }]]]);
   });
 
   it('mutations : recette, favori, frigo, planning, profil', async () => {

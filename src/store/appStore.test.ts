@@ -106,6 +106,33 @@ describe('appStore — mutations', () => {
     expect(store.getState().fridge).toHaveLength(n);
   });
 
+  it('ajout groupé : capitalise, ignore vides, doublons et aliments déjà au frigo', async () => {
+    const { store } = await readyStore();
+    const n = store.getState().fridge.length;
+    const added = await store.getState().addFridgeItems([
+      { name: 'lait', category: 'Autre' },
+      { name: 'Tomates', category: 'Légume' }, // « Tomate » est déjà au frigo
+      { name: ' ', category: 'Autre' },
+      { name: 'Lait', category: 'Autre' },
+      { name: 'poulet', category: 'Viande' },
+    ]);
+    expect(added).toBe(2);
+    const fridge = store.getState().fridge;
+    expect(fridge).toHaveLength(n + 2);
+    expect(fridge.slice(0, 2).map((f) => f.name)).toEqual(['Lait', 'Poulet']);
+    expect(fridge.some((f) => f.id.startsWith('tmp-'))).toBe(false);
+    expect(await store.getState().addFridgeItems([{ name: 'Lait', category: 'Autre' }])).toBe(0);
+  });
+
+  it('ajout groupé : annule tout si l’enregistrement échoue', async () => {
+    const { store, repo } = await readyStore();
+    const n = store.getState().fridge.length;
+    vi.spyOn(repo, 'addFridgeItems').mockRejectedValueOnce(new Error('Connexion réseau impossible'));
+    expect(await store.getState().addFridgeItems([{ name: 'Kiwi', category: 'Fruit' }])).toBe(0);
+    expect(store.getState().fridge).toHaveLength(n);
+    expect(store.getState().toast?.text).toBe('Connexion réseau impossible');
+  });
+
   it('supprime un aliment', async () => {
     const { store } = await readyStore();
     const id = store.getState().fridge[0]!.id;

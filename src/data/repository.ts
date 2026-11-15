@@ -25,6 +25,8 @@ export interface Repository {
   setRecipeImage(user: User, recipeId: string, imageUrl: string | null): Promise<void>;
   setFavorite(user: User, recipeId: string, on: boolean): Promise<void>;
   addFridgeItem(user: User, name: string, category: FoodCategory): Promise<FridgeItem>;
+  /** Ajout groupé (scan photo) : une seule requête ; renvoie les aliments créés dans l'ordre reçu. */
+  addFridgeItems(user: User, items: readonly { name: string; category: FoodCategory }[]): Promise<FridgeItem[]>;
   removeFridgeItem(user: User, id: string): Promise<void>;
   setPlanEntry(user: User, day: number, meal: number, recipeId: string | null): Promise<void>;
 }

@@ -1,9 +1,10 @@
 import { createStore } from 'zustand/vanilla';
-import { capitalize, planKey } from '../domain/logic';
+import { capitalize, planKey, sameFood } from '../domain/logic';
 import type { FoodCategory, FridgeItem, Plan, Profile, Recipe, RecipeDraft, User } from '../domain/types';
 import type { Repository } from '../data/repository';
 import { defaultImporter, type RecipeImporter } from '../data/recipeImport';
 import { createImageFinder, type ImageFinder } from '../data/recipeImages';
+import { defaultScanner, type FridgeScanner } from '../data/fridgeScan';
 
 export type Sheet = { type: 'pick'; day: number; meal: number } | { type: 'plan'; recipeId: string } | null;
 
@@ -22,6 +23,8 @@ export interface AppState {
   splashSeen: boolean;
   /** Recherche / import de recettes en ligne (dépendance, non réactive). */
   importer: RecipeImporter;
+  /** Détection d'aliments sur photo (dépendance, non réactive). */
+  scanner: FridgeScanner;
 }
 
 export interface AppActions {
@@ -33,6 +36,11 @@ export interface AppActions {
   reload(): Promise<void>;
   toggleFavorite(recipeId: string): Promise<void>;
   addFridgeItem(name: string, category: FoodCategory): Promise<boolean>;
+  /**
+   * Ajout groupé (aliments détectés sur photo). Ignore les noms vides, les doublons et ce qui est déjà au frigo.
+   * Renvoie le nombre d'aliments ajoutés (0 en cas d'échec, avec un message).
+   */
+  addFridgeItems(items: readonly { name: string; category: FoodCategory }[]): Promise<number>;
   removeFridgeItem(id: string): Promise<void>;
   setPlanEntry(day: number, meal: number, recipeId: string | null): Promise<void>;
   addRecipe(draft: RecipeDraft): Promise<Recipe | null>;
@@ -64,6 +72,7 @@ export function createAppStore(
   repo: Repository,
   importer: RecipeImporter = defaultImporter(repo.mode, () => repo.getAccessToken()),
   images: ImageFinder = createImageFinder(importer),
+  scanner: FridgeScanner = defaultScanner(repo.mode, () => repo.getAccessToken()),
 ) {
   let toastSeq = 0;
   /** Recherches de photo déjà lancées cette session (`id` ou `id|urlCassée`). */
@@ -116,6 +125,7 @@ export function createAppStore(
       sheet: null,
       splashSeen: false,
       importer,
+      scanner,
 
       async init() {
         unsubscribe?.();
@@ -201,6 +211,31 @@ export function createAppStore(
           set((s) => ({ fridge: s.fridge.filter((f) => f.id !== tempId) }));
           fail(e);
           return false;
+        }
+      },
+
+      async addFridgeItems(raw) {
+        const user = get().user;
+        if (!user) return 0;
+        const items: { name: string; category: FoodCategory }[] = [];
+        for (const r of raw) {
+          const name = capitalize(r.name);
+          if (!name || get().fridge.some((f) => sameFood(f.name, name)) || items.some((i) => sameFood(i.name, name))) continue;
+          items.push({ name, category: r.category });
+        }
+        if (items.length === 0) return 0;
+        const tempIds = items.map((_, i) => `tmp-${Date.now()}-${i}`);
+        set((s) => ({ fridge: [...items.map((it, i) => ({ id: tempIds[i]!, ...it })), ...s.fridge] }));
+        try {
+          const created = await repo.addFridgeItems(user, items);
+          const byTemp = new Map(tempIds.map((t, i) => [t, created[i]]));
+          set((s) => ({ fridge: s.fridge.map((f) => byTemp.get(f.id) ?? f) }));
+          return items.length;
+        } catch (e) {
+          const temp = new Set(tempIds);
+          set((s) => ({ fridge: s.fridge.filter((f) => !temp.has(f.id)) }));
+          fail(e);
+          return 0;
         }
       },
 

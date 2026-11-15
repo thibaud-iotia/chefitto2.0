@@ -36,6 +36,11 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 | 22 | Vignettes redimensionnées par le CDN Marmiton (`_w{n}h{n}c1`, `srcset` 1x/2x/3x) ; cache SW `recipe-images` (CacheFirst, 150 entrées, 30 j) | 10 Ko au lieu de 70 Ko par carte ; photos visibles hors ligne. `referrerPolicy=no-referrer`. |
 | 23 | `image_url` filtrée (https, ≤ 2048, sans identifiants) côté client **et** par contrainte SQL ; insert sans la colonne si absente | Données tierces affichées ; front déployable avant la migration SQL. |
 | 24 | **Icône** = toque de chef blanche en tracés vectoriels sur dégradé rouge ; source `public/icon.svg` carrée pleine (sans coins arrondis), `favicon.svg` = même dessin arrondi ; PNG via `node scripts/gen-assets.mjs` ; lien `apple-touch-icon` versionné (`?v=2`) | iOS applique son propre masque (l'ancienne icône montrait un double arrondi) ; pas de texte = pas de dépendance à une police absente de sharp ; iOS garde l'ancienne icône en cache sans changement d'URL. |
+| 25 | **Détection d'aliments sur photo** (frigo, placard, courses, ticket) : Edge Function `fridge-scan` → Claude `claude-opus-5-5` (vision, `effort: low`, sortie structurée JSON schema, `fallbacks: "default"`) ; code commun `_shared/fridgeScan.ts` + middleware Vite `/api/fridge-scan` | Aucun modèle embarqué fiable pour des aliments variés / tickets ; un LLM vision lit aussi les étiquettes et abréviations. Clé API côté serveur uniquement (secret Supabase). Sortie structurée = JSON toujours valide. Effort bas : perception, pas de raisonnement → rapide et ~1 ct/photo. |
+| 26 | Photos **redimensionnées sur le téléphone** (1568 px max, JPEG 0,82, EXIF/GPS retirés), 4 max par analyse, non stockées | Upload rapide en 4G, coût réduit, vie privée. 1568 px = taille utile maximale pour la vision Claude. |
+| 27 | **Revue obligatoire** avant ajout (cocher / renommer / changer de catégorie) ; doublons « déjà au frigo » décochés (`sameFood` : casse, accents, pluriel) ; insertion groupée `addFridgeItems` (1 requête) | La détection peut se tromper ; l'utilisateur garde la main. « Lait » ≠ « Laitue » (comparaison stricte, pas par inclusion). |
+| 28 | Garde-fous coût : JWT `authenticated` exigé, limiteur 30 analyses/h/utilisateur (mémoire d'instance), corps ≤ ~27 Mo, validation base64/type/taille | Inscription ouverte → éviter l'emballement de la facture API. Limiteur en mémoire = borne simple ; quota exact = table SQL si besoin. |
+| 29 | `_shared/fridgeScanContract.ts` sans dépendance, seul importé par l'app ; `@anthropic-ai/sdk` résolu par `fridge-scan/deno.json` (Deno) et npm (Node) | Le SDK ne doit jamais entrer dans le bundle navigateur (vérifié : budget JS inchangé). |
 
 ## Tests
 
@@ -69,6 +74,7 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
 | Mode cuisine | `#/recipe/:id/cook` | ☑ |
 | Planning | `#/planning` | ☑ |
 | Frigo | `#/fridge` | ☑ |
+| Frigo › Remplir avec une photo (scan + revue) | `#/fridge` | ☑ |
 | Suggestions | `#/suggestions` | ☑ |
 | Nouvelle recette | `#/add` | ☑ |
 | Importer (recherche Marmiton + lien) | `#/add/import` | ☑ |
@@ -95,6 +101,9 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
 - [ ] Dans Supabase › Auth › URL configuration : ajouter l'URL GitHub Pages.
 - [ ] Secrets GitHub du repo : `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 - [ ] GitHub › Settings › Pages › Source : « GitHub Actions ».
+- [ ] Détection d'aliments : créer une clé API Anthropic, puis
+      `npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-... --project-ref <ref>` et
+      `npx supabase functions deploy fridge-scan --project-ref <ref> --use-api` (auto en CI si secrets Supabase présents).
 - [ ] Déployer la fonction d'import : `npx supabase functions deploy recipe-import --project-ref <ref> --use-api`
       (ou secrets `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_REF` pour le déploiement auto en CI).
 

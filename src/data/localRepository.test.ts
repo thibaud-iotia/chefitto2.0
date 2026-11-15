@@ -14,6 +14,17 @@ describe('LocalRepository', () => {
     expect((await repo.loadAll(u2)).fridge[0]!.name).toBe('Kiwi');
   });
 
+  it('ajout groupé d’aliments, en tête du frigo', async () => {
+    const repo = new LocalRepository();
+    const u = await repo.signIn('lot@cuisine.fr');
+    const created = await repo.addFridgeItems(u, [
+      { name: 'Lait', category: 'Autre' },
+      { name: 'Poulet', category: 'Viande' },
+    ]);
+    expect(created.map((c) => c.name)).toEqual(['Lait', 'Poulet']);
+    expect((await repo.loadAll(u)).fridge.slice(0, 2).map((f) => f.id)).toEqual(created.map((c) => c.id));
+  });
+
   it('notifie les changements d’auth et se désabonne', async () => {
     const repo = new LocalRepository();
     const cb = vi.fn();

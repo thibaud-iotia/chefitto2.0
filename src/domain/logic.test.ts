@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  sameFood,
   EMPTY_FORM,
   badgeTone,
   buildRecipeDraft,
@@ -195,5 +196,16 @@ describe('validateAuth', () => {
     expect(validateAuth('login', { email: 'a@b.fr', password: '123' })).toMatch(/6 caractères/);
     expect(validateAuth('signup', { email: 'a@b.fr', password: '123456', confirm: '1234567' })).toMatch(/correspondent/);
     expect(validateAuth('signup', { email: 'a@b.fr', password: '123456', confirm: '123456' })).toBeNull();
+  });
+});
+
+describe('sameFood', () => {
+  it('ignore casse, accents et pluriel, sans confondre les préfixes', () => {
+    expect(sameFood('Tomates', 'tomate')).toBe(true);
+    expect(sameFood('Poireaux', 'Poireau')).toBe(true);
+    expect(sameFood('Crème fraîche', 'creme fraiche')).toBe(true);
+    expect(sameFood('Lait', 'Laitue')).toBe(false);
+    expect(sameFood('Riz', 'Ri')).toBe(false);
+    expect(sameFood('', '')).toBe(false);
   });
 });

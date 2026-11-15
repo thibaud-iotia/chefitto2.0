@@ -189,3 +189,33 @@ test('photos : trouvées automatiquement, mémorisées, conservées à l’impor
   await expect(photo).toHaveAttribute('src', `${PHOTO_ORIGIN}/tarte-importee.png`);
   expect(lookups).not.toContain('Tarte aux pommes');
 });
+
+test('scanner le frigo en photo : image recompressée en JPEG, revue, ajout (API simulée)', async ({ loggedIn: page }) => {
+  let sent: { mediaType: string; data: string }[] = [];
+  await page.route('**/api/fridge-scan', async (route) => {
+    sent = (route.request().postDataJSON() as { images: typeof sent }).images;
+    await route.fulfill({
+      json: {
+        items: [
+          { name: 'Lait', category: 'Autre', confidence: 'high' },
+          { name: 'Tomate', category: 'Légume', confidence: 'high' },
+          { name: 'Saumon', category: 'Poisson', confidence: 'low' },
+        ],
+      },
+    });
+  });
+  await page.getByRole('link', { name: 'Frigo', exact: true }).click();
+  await page.getByLabel('Choisir des photos').setInputFiles('public/icons/icon-512.png');
+
+  await expect(page.getByRole('heading', { name: '3 aliments détectés' })).toBeVisible();
+  expect(sent).toHaveLength(1);
+  expect(sent[0]!.mediaType).toBe('image/jpeg');
+  expect(Buffer.from(sent[0]!.data, 'base64').subarray(0, 2).toString('hex')).toBe('ffd8'); // vrai JPEG
+  await expect(page.getByRole('checkbox', { name: 'Ajouter Tomate' })).not.toBeChecked();
+
+  await page.getByRole('button', { name: 'Ajouter 2 aliments' }).click();
+  await expect(page.getByText('2 aliments ajoutés au frigo')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Poisson' })).toContainText('Saumon');
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Autre' })).toContainText('Lait');
+});

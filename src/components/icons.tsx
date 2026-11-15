@@ -48,6 +48,19 @@ export const Plus = (p: P) => (
     <path d="M12 5v14M5 12h14" />
   </Svg>
 );
+export const Camera = (p: P) => (
+  <Svg size={20} {...p}>
+    <path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
+    <circle cx="12" cy="13.5" r="3.5" />
+  </Svg>
+);
+export const Images = (p: P) => (
+  <Svg size={20} {...p}>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <circle cx="9" cy="10" r="1.6" />
+    <path d="m21 16-5-5-9 8" />
+  </Svg>
+);
 export const Download = (p: P) => (
   <Svg size={20} stroke="#fff" strokeWidth={2.2} {...p}>
     <path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" />

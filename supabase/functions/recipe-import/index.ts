@@ -8,6 +8,7 @@
 // La passerelle Supabase vérifie la signature du JWT (verify_jwt) ; on exige en plus un utilisateur
 // connecté (rôle « authenticated »), pour que la clé anon publique seule ne suffise pas.
 
+import { jwtClaims } from '../_shared/jwt.ts';
 import { handleImportRequest } from '../_shared/recipeScraper.ts';
 
 const CORS = {
@@ -28,23 +29,10 @@ function json(status: number, body: unknown, maxAge = 0): Response {
   });
 }
 
-/** Lit le rôle du JWT (signature déjà vérifiée par la passerelle Supabase). */
-function role(req: Request): string | null {
-  const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
-  const payload = token?.split('.')[1];
-  if (!payload) return null;
-  try {
-    const b64 = payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(payload.length / 4) * 4, '=');
-    return (JSON.parse(atob(b64)) as { role?: string }).role ?? null;
-  } catch {
-    return null;
-  }
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (req.method !== 'GET') return json(405, { error: 'Méthode non autorisée' });
-  if (role(req) !== 'authenticated') return json(401, { error: 'Connectez-vous pour importer une recette' });
+  if (jwtClaims(req.headers.get('Authorization')).role !== 'authenticated') return json(401, { error: 'Connectez-vous pour importer une recette' });
 
   const { status, body, maxAge } = await handleImportRequest(new URL(req.url).searchParams);
   return json(status, body, maxAge);

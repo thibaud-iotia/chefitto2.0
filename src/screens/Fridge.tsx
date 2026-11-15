@@ -5,6 +5,7 @@ import { cookableCount, groupFridge } from '../domain/logic';
 import { FOOD_CATEGORIES, type FoodCategory } from '../domain/types';
 import { useApp } from '../store/storeContext';
 import { Button, Chip, Input, Tag } from '../ui';
+import { FridgeScan } from './FridgeScan';
 import s from './screens.module.css';
 
 export default function Fridge() {
@@ -33,6 +34,7 @@ export default function Fridge() {
           {fridge.length} aliments · {cookableCount(recipes, fridge)} recettes réalisables
         </p>
       </div>
+      <FridgeScan />
       <form className={`${s.card} ${s.fridgeForm}`} onSubmit={add}>
         <Input
           aria-label="Nouvel aliment"

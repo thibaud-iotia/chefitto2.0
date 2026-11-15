@@ -65,6 +65,19 @@ ou trouvée automatiquement par nom sur Marmiton, via la fonction d'import).
 
    La fonction exige un utilisateur connecté (JWT `authenticated`). Sans elle, l'écran « Importer »
    affiche les modèles locaux et un message « recherche en ligne indisponible ».
+7. **Fonction de détection d'aliments** (écran Frigo › « Remplir avec une photo ») — analyse les
+   photos avec Claude (Anthropic). Crée une clé sur https://console.anthropic.com (facturation à l'usage,
+   de l'ordre d'un centime par photo), puis :
+
+   ```bash
+   npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-... --project-ref <ref-du-projet>
+   npx supabase functions deploy fridge-scan --project-ref <ref-du-projet> --use-api
+   ```
+
+   Réservée aux utilisateurs connectés, 30 analyses/heure/utilisateur (secret optionnel
+   `FRIDGE_SCAN_PER_HOUR`). Les photos sont réduites à 1568 px et recompressées en JPEG sur le
+   téléphone (métadonnées GPS supprimées) ; elles ne sont pas stockées. En dev : `ANTHROPIC_API_KEY`
+   dans `.env.local`.
 
 ### 3. GitHub
 
@@ -111,7 +124,10 @@ src/
   screens/     un fichier par écran de la maquette
 supabase/      schéma SQL + RLS
   functions/recipe-import/   Edge Function : proxy de recherche / import (CORS)
+  functions/fridge-scan/     Edge Function : détection d'aliments sur photo (Claude vision)
   functions/_shared/         recipeScraper.ts — parsing Marmiton + JSON-LD schema.org, garde-fou SSRF
+                             fridgeScan.ts — prompt, sortie structurée, validation, limiteur
 vite-plugin-recipe-import.ts sert /api/recipe-import en dev / preview avec le même code
+vite-plugin-fridge-scan.ts   sert /api/fridge-scan en dev / preview avec le même code
 e2e/           tests Playwright
 ```

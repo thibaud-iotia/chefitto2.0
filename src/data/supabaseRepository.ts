@@ -180,6 +180,12 @@ export class SupabaseRepository implements Repository {
     );
   }
 
+  async addFridgeItems(_user: User, items: readonly { name: string; category: FoodCategory }[]): Promise<FridgeItem[]> {
+    if (items.length === 0) return [];
+    const rows = items.map((i) => ({ name: i.name, category: i.category }));
+    return check(await this.sb.from('fridge_items').insert(rows).select('id,name,category')) as FridgeItem[];
+  }
+
   async removeFridgeItem(_user: User, id: string): Promise<void> {
     check(await this.sb.from('fridge_items').delete().eq('id', id));
   }

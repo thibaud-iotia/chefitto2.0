@@ -1025,3 +1025,94 @@
     animation-duration: 2.4s;
   }
 }
+
+/* ---------- Scan photo du frigo ---------- */
+.scanCard {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.scanHint {
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--gray-600);
+}
+.grow {
+  flex: 1;
+}
+.scanBusy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-weight: 600;
+  color: var(--gray-900);
+}
+.scanList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.scanRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gray-100);
+  background: var(--surface-card-hi);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.scanRowOff {
+  opacity: 0.55;
+}
+.scanCheck {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 9px 0 0;
+  accent-color: var(--red-600);
+}
+.scanFields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.scanName,
+.scanSelect {
+  font: inherit;
+  color: var(--gray-900);
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.scanName {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  font-size: 16px; /* pas de zoom auto iOS */
+  font-weight: 600;
+}
+.scanName:focus,
+.scanSelect:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+.scanMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.scanSelect {
+  min-height: 32px;
+  padding: 0 8px;
+  font-size: 14px;
+}

@@ -97,6 +97,17 @@ export function formatTime(min: number): string {
   return `${min} min`;
 }
 
+/** Même aliment, au pluriel près (« Tomates » = « Tomate », « Poireaux » = « Poireau ») ; « Lait » ≠ « Laitue ». */
+export function sameFood(a: string, b: string): boolean {
+  const key = (s: string) =>
+    normalize(s)
+      .split(' ')
+      .map((w) => (w.length > 3 ? w.replace(/[sx]$/, '') : w))
+      .join(' ');
+  const ka = key(a);
+  return ka.length > 0 && ka === key(b);
+}
+
 export function capitalize(s: string): string {
   const t = s.trim();
   return t ? t[0]!.toUpperCase() + t.slice(1) : t;
