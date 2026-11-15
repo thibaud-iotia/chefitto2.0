@@ -19,6 +19,7 @@
   "include": [
     "vite.config.ts",
     "vite-plugin-recipe-import.ts",
+    "vite-plugin-lyrics.ts",
     "playwright.config.ts",
     "e2e",
     "supabase/functions/_shared"

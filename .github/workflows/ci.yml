@@ -126,6 +126,7 @@ jobs:
         run: |
           npx --yes supabase@2 functions deploy recipe-import --project-ref "$SUPABASE_PROJECT_REF" --use-api
           npx --yes supabase@2 functions deploy fridge-scan --project-ref "$SUPABASE_PROJECT_REF" --use-api
+          npx --yes supabase@2 functions deploy lyrics --project-ref "$SUPABASE_PROJECT_REF" --use-api
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

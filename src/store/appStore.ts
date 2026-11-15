@@ -5,6 +5,7 @@ import type { Repository } from '../data/repository';
 import { defaultImporter, type RecipeImporter } from '../data/recipeImport';
 import { createImageFinder, type ImageFinder } from '../data/recipeImages';
 import { defaultScanner, type FridgeScanner } from '../data/fridgeScan';
+import { defaultLyricsApi, type LyricsApi } from '../data/lyrics';
 
 export type Sheet = { type: 'pick'; day: number; meal: number } | { type: 'plan'; recipeId: string } | null;
 
@@ -25,6 +26,8 @@ export interface AppState {
   importer: RecipeImporter;
   /** Détection d'aliments sur photo (dépendance, non réactive). */
   scanner: FridgeScanner;
+  /** Page de test des paroles (dépendance, non réactive). */
+  lyrics: LyricsApi;
 }
 
 export interface AppActions {
@@ -73,6 +76,7 @@ export function createAppStore(
   importer: RecipeImporter = defaultImporter(repo.mode, () => repo.getAccessToken()),
   images: ImageFinder = createImageFinder(importer),
   scanner: FridgeScanner = defaultScanner(repo.mode, () => repo.getAccessToken()),
+  lyrics: LyricsApi = defaultLyricsApi(repo.mode, () => repo.getAccessToken()),
 ) {
   let toastSeq = 0;
   /** Recherches de photo déjà lancées cette session (`id` ou `id|urlCassée`). */
@@ -126,6 +130,7 @@ export function createAppStore(
       splashSeen: false,
       importer,
       scanner,
+      lyrics,
 
       async init() {
         unsubscribe?.();

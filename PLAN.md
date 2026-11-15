@@ -41,6 +41,8 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 | 27 | **Revue obligatoire** avant ajout (cocher / renommer / changer de catégorie) ; doublons « déjà au frigo » décochés (`sameFood` : casse, accents, pluriel) ; insertion groupée `addFridgeItems` (1 requête) | La détection peut se tromper ; l'utilisateur garde la main. « Lait » ≠ « Laitue » (comparaison stricte, pas par inclusion). |
 | 28 | Garde-fous coût : JWT `authenticated` exigé, limiteur 30 analyses/h/utilisateur (mémoire d'instance), corps ≤ ~27 Mo, validation base64/type/taille | Inscription ouverte → éviter l'emballement de la facture API. Limiteur en mémoire = borne simple ; quota exact = table SQL si besoin. |
 | 29 | `_shared/fridgeScanContract.ts` sans dépendance, seul importé par l'app ; `@anthropic-ai/sdk` résolu par `fridge-scan/deno.json` (Deno) et npm (Node) | Le SDK ne doit jamais entrer dans le bundle navigateur (vérifié : budget JS inchangé). |
+| 30 | **Page de test `#/test`** (paroles) : `_shared/lyricsScraper.ts` + middleware Vite `/api/lyrics` (dev/preview seulement) ; Genius = recherche JSON non officielle `genius.com/api/search/song` + scraping des `div[data-lyrics-container]` (sous-blocs `data-exclude-from-selection` retirés) ; LRCLIB = API JSON publique | Prototype pour évaluer la faisabilité. Le JSON-LD des recettes ne s'applique pas aux paroles. Genius bloque souvent les IP de datacenter (Cloudflare) et interdit le scraping dans ses CGU : test local ≠ prod. Lien Genius restreint à `https://genius.com/*-lyrics` (pas d'URL arbitraire). |
+| 31 | Test paroles **en prod** : Edge Function `lyrics` (même code `_shared/lyricsScraper.ts`, JWT `authenticated` exigé, déployée par la CI) ; client `src/data/lyrics.ts` dans le store (Edge Function en mode Supabase, middleware Vite en local) ; la page affiche la cible et la durée de chaque appel | Seul moyen de savoir si Genius bloque les IP Supabase. Page `#/test` hors garde d'auth : non connecté → 401 explicite. |
 
 ## Tests
 
@@ -78,6 +80,7 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
 | Suggestions | `#/suggestions` | ☑ |
 | Nouvelle recette | `#/add` | ☑ |
 | Importer (recherche Marmiton + lien) | `#/add/import` | ☑ |
+| Test paroles (Genius vs LRCLIB ; Vite en local, Edge Function `lyrics` en prod) | `#/test` | ☑ |
 | Profil | `#/profile` | ☑ |
 | Bottom sheet + toast | global | ☑ |
 
