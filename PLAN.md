@@ -41,6 +41,7 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 | 27 | **Revue obligatoire** avant ajout (cocher / renommer / changer de catégorie) ; doublons « déjà au frigo » décochés (`sameFood` : casse, accents, pluriel) ; insertion groupée `addFridgeItems` (1 requête) | La détection peut se tromper ; l'utilisateur garde la main. « Lait » ≠ « Laitue » (comparaison stricte, pas par inclusion). |
 | 28 | Garde-fous coût : JWT `authenticated` exigé, limiteur 30 analyses/h/utilisateur (mémoire d'instance), corps ≤ ~27 Mo, validation base64/type/taille | Inscription ouverte → éviter l'emballement de la facture API. Limiteur en mémoire = borne simple ; quota exact = table SQL si besoin. |
 | 29 | `_shared/fridgeScanContract.ts` sans dépendance, seul importé par l'app ; `@anthropic-ai/sdk` résolu par `fridge-scan/deno.json` (Deno) et npm (Node) | Le SDK ne doit jamais entrer dans le bundle navigateur (vérifié : budget JS inchangé). |
+| 30 | Réserve sous la barre de nav = pseudo-élément `.page::after` (112 px + safe-area), pas `padding-bottom` ; `fieldset` en `min-width: 0` | Sur iPhone, « Ajouter la recette » restait caché sous la barre : certains Safari iOS ignorent le padding de fin d'un conteneur flex scrollable. Un `fieldset` prend par défaut la largeur min-content de son contenu : le bloc « Étapes » débordait à droite sur 393 px (iPhone 16). Test e2e de non-régression. |
 
 ## Tests
 

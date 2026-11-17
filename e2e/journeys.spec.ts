@@ -219,3 +219,18 @@ test('scanner le frigo en photo : image recompressée en JPEG, revue, ajout (API
   await page.reload();
   await expect(page.getByRole('region', { name: 'Autre' })).toContainText('Lait');
 });
+
+test('« Ajouter la recette » n’est jamais masqué par la barre de navigation', async ({ loggedIn: page }) => {
+  await page.setViewportSize({ width: 393, height: 852 }); // iPhone 16
+  await page.getByRole('button', { name: 'Ajouter une recette' }).click();
+  const submit = page.getByRole('button', { name: 'Ajouter la recette' });
+  await expect(submit).toBeVisible();
+  const main = page.getByRole('main');
+  await main.evaluate((el) => (el.scrollTop = el.scrollHeight));
+  // Aucun débordement horizontal (le bloc « Étapes » ne doit pas élargir la page).
+  expect(await main.evaluate((el) => el.scrollWidth - el.clientWidth)).toBe(0);
+  const btn = (await submit.boundingBox())!;
+  const fab = (await page.getByRole('navigation').getByRole('button', { name: 'Ajouter une recette' }).boundingBox())!;
+  expect(btn.y + btn.height).toBeLessThan(fab.y);
+  await submit.click({ trial: true }); // cliquable : rien ne le recouvre
+});

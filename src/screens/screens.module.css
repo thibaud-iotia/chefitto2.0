@@ -2,11 +2,22 @@
 .page {
   flex: 1;
   overflow: auto;
-  padding: max(32px, calc(env(safe-area-inset-top, 0px) + 16px)) 20px calc(110px + env(safe-area-inset-bottom, 0px));
+  padding: max(32px, calc(env(safe-area-inset-top, 0px) + 16px)) 20px 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
   -webkit-overflow-scrolling: touch;
+}
+/*
+ * Réserve sous le contenu pour la barre de navigation flottante (68 px + 16 px de marge + bouton « + »
+ * qui dépasse) et la zone du home indicator. Élément réel plutôt que padding-bottom : certaines versions
+ * de Safari iOS n'incluent pas le padding de fin d'un conteneur flex scrollable dans la zone de défilement,
+ * le dernier élément (ex. « Ajouter la recette ») restait alors caché sous la barre.
+ */
+.page::after {
+  content: '';
+  flex: none;
+  height: calc(112px + env(safe-area-inset-bottom, 0px));
 }
 /* Dans un conteneur flex scrollable, les enfants ne doivent jamais se comprimer. */
 .page > * {
@@ -191,6 +202,9 @@
     var(--gray-50);
   gap: 20px;
   padding-bottom: 32px;
+}
+.auth::after {
+  display: none;
 }
 .authLogoMark {
   width: 36px;

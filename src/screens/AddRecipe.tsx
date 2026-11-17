@@ -85,7 +85,7 @@ export default function AddRecipe() {
           value={form.description}
           onChange={(e) => f.set('description', e.target.value)}
         />
-        <fieldset style={{ border: 0, padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <fieldset style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div className={s.stepsHead}>
             <legend className={s.stepsLabel}>Étapes</legend>
             <span className={s.mono} style={{ fontSize: 12, color: 'var(--gray-600)' }}>
