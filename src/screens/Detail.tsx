@@ -28,7 +28,7 @@ export default function Detail() {
 
   return (
     <>
-      <main className={`${s.page} ${s.pageFlush}`} style={{ paddingTop: 0 }}>
+      <main className={`${s.page} ${s.pageFlush} ${s.pageWithBar}`} style={{ paddingTop: 0 }}>
         <div className={s.detailHero}>
           <IconButton label="Retour" className={s.detailBack} onClick={back}>
             <ChevronLeft />
@@ -90,9 +90,9 @@ export default function Detail() {
           </section>
         </div>
       </main>
-      <div className={s.actionBar}>
+      <div className={s.actionBar} role="group" aria-label="Actions de la recette">
         <div style={{ flex: 1 }}>
-          <Button variant="outline" size="lg" block onClick={() => openSheet({ type: 'plan', recipeId: recipe.id })}>
+          <Button variant="outline" size="lg" block className={s.btnSolid} onClick={() => openSheet({ type: 'plan', recipeId: recipe.id })}>
             Planifier
           </Button>
         </div>

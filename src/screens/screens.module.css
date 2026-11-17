@@ -582,16 +582,32 @@
   font-size: 15px;
   line-height: 1.5;
 }
+/*
+ * Barre d'actions dans le flux (dernier enfant du cadre flex colonne), PAS en superposition :
+ * en `position: absolute` par-dessus la page scrollable, les ingrédients défilaient sous un fond
+ * dégradé semi-transparent et sous le bouton outline (fond transparent) ; Safari iOS peut même
+ * peindre la couche de défilement au-dessus. Ici la zone de défilement s'arrête au bord de la barre.
+ */
 .actionBar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 14px 20px calc(20px + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(180deg, rgba(247, 247, 251, 0), var(--gray-50) 35%);
+  flex: none;
+  position: relative;
+  z-index: 5;
+  padding: 12px 20px max(16px, env(safe-area-inset-bottom, 0px));
+  background: var(--gray-50);
+  border-top: 1px solid var(--gray-100);
+  box-shadow: 0 -8px 24px rgba(20, 20, 28, 0.06);
   display: flex;
   gap: 10px;
-  z-index: 5;
+}
+.actionBar .btnSolid {
+  background: #fff;
+}
+/* Page suivie d'une barre d'actions : pas de barre de nav dessous, petite marge suffit. */
+.pageWithBar {
+  min-height: 0;
+}
+.pageWithBar::after {
+  height: 24px;
 }
 
 /* ---------- Cook ---------- */

@@ -240,3 +240,42 @@ test('« Ajouter la recette » n’est jamais masqué par la barre de navigation
   expect(btn.y + btn.height).toBeLessThan(fab.y);
   await submit.click({ trial: true }); // cliquable : rien ne le recouvre
 });
+
+test('fiche recette : les ingrédients ne passent jamais sous « Planifier » / « Commencer à cuisiner »', async ({ loggedIn: page }) => {
+  await page.setViewportSize({ width: 393, height: 852 }); // iPhone 16
+  await page.getByRole('link', { name: 'Veggie tomato mix' }).click();
+  const main = page.getByRole('main');
+  const bar = page.getByRole('group', { name: 'Actions de la recette' });
+  const plan = page.getByRole('button', { name: 'Planifier' });
+  const cook = page.getByRole('button', { name: 'Commencer à cuisiner' });
+  await expect(cook).toBeVisible();
+
+  const barBox = (await bar.boundingBox())!;
+  // La barre est hors de la zone de défilement : la page s'arrête à son bord supérieur.
+  const mainBox = (await main.boundingBox())!;
+  expect(mainBox.y + mainBox.height).toBeLessThanOrEqual(barBox.y + 1);
+  expect(barBox.y + barBox.height).toBeLessThanOrEqual(852);
+
+  for (const pos of ['middle', 'end'] as const) {
+    await main.evaluate((el, p) => (el.scrollTop = p === 'end' ? el.scrollHeight : el.scrollHeight / 2), pos);
+    // Aucun ingrédient visible ne chevauche la barre d'actions.
+    const rows = await page.locator('main li').evaluateAll((els) =>
+      els.map((e) => e.getBoundingClientRect()).filter((r) => r.height > 0).map((r) => ({ top: r.top, bottom: r.bottom })),
+    );
+    const area = await main.evaluate((el) => el.getBoundingClientRect().bottom);
+    for (const r of rows.filter((r) => r.top < area)) expect(Math.min(r.bottom, area)).toBeLessThanOrEqual(barBox.y + 1);
+    // Ce qui est réellement peint au centre des boutons, ce sont les boutons.
+    for (const btn of [plan, cook]) {
+      expect(await btn.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return !!hit && el.contains(hit);
+      })).toBe(true);
+    }
+  }
+  // Le dernier ingrédient reste atteignable au-dessus de la barre.
+  const last = (await page.locator('main li').last().boundingBox())!;
+  expect(last.y + last.height).toBeLessThanOrEqual(barBox.y);
+  await cook.click({ trial: true });
+  await plan.click({ trial: true });
+});
