@@ -318,6 +318,16 @@ function stubImportApi(handler: Handler = () => ({ body: { results: [], page: 1,
   return fetchMock;
 }
 
+
+/**
+ * Fin d'un import : le toast s'affiche tout de suite, mais le retour au formulaire (`navigate(-1)`)
+ * passe par une transition React, de priorité plus basse. On attend donc aussi le formulaire,
+ * sinon le test dépend de la vitesse de la machine (échec en CI sous instrumentation coverage).
+ */
+async function imported() {
+  await screen.findByText('Recette importée');
+  return screen.findByLabelText('Nom du plat');
+}
 describe('Import en ligne', () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -345,8 +355,7 @@ describe('Import en ligne', () => {
     expect(screen.queryByRole('button', { name: 'Plus de résultats' })).not.toBeInTheDocument();
 
     await user.click(within(results).getByRole('button', { name: /Risotto au chorizo/ }));
-    expect(await screen.findByText('Recette importée')).toBeInTheDocument();
-    expect(screen.getByLabelText('Nom du plat')).toHaveValue('Risotto au chorizo');
+    expect(await imported()).toHaveValue('Risotto au chorizo');
     expect(screen.getByLabelText('Ingrédients')).toHaveValue('4 verres de riz\n1,5 l de bouillon\nchorizo');
     expect(screen.getByLabelText('Étape 2')).toHaveValue('Ajouter le riz.');
     expect(screen.getByRole('link', { name: 'marmiton.org' })).toHaveAttribute('href', IMPORTED.sourceUrl);
@@ -428,7 +437,7 @@ describe('Import en ligne', () => {
     const { user, store } = await renderApp({ route: '/add/import' });
     await user.type(screen.getByRole('searchbox'), 'risotto');
     await user.click(await screen.findByRole('button', { name: /Risotto aux cèpes/ }));
-    await screen.findByText('Recette importée');
+    await imported();
     expect(document.querySelector('[data-photo] img')).toHaveAttribute('src', 'https://img.test/risotto.jpg');
     await user.click(screen.getByRole('button', { name: 'Ajouter la recette' }));
     await screen.findByText('Recette ajoutée');
@@ -442,7 +451,7 @@ describe('Import en ligne', () => {
     const { user, store } = await renderApp({ route: '/add/import' });
     await user.type(screen.getByRole('searchbox'), 'risotto');
     await user.click(await screen.findByRole('button', { name: /Risotto au chorizo/ }));
-    await screen.findByText('Recette importée');
+    await imported();
     expect(document.querySelector('[data-photo] img')).toHaveAttribute('src', 'https://assets.afcdn.com/recipe/1.webp');
     await user.click(screen.getByRole('button', { name: 'Oublier la source importée' }));
     expect(document.querySelector('[data-photo]')).toBeNull();
@@ -456,7 +465,7 @@ describe('Import en ligne', () => {
     const { user, store } = await renderApp({ route: '/add/import' });
     await user.type(screen.getByRole('searchbox'), 'https://www.marmiton.org/recettes/recette_1.aspx');
     await user.keyboard('{Enter}');
-    await screen.findByText('Recette importée');
+    await imported();
     fireEvent.error(document.querySelector('[data-photo] img')!);
     await user.click(screen.getByRole('button', { name: 'Ajouter la recette' }));
     await screen.findByText('Recette ajoutée');
