@@ -1,0 +1,25 @@
+.icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  line-height: 1;
+  /* Polices emoji couleur du système en priorité (sinon certaines polices web affichent un glyphe monochrome). */
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  user-select: none;
+}
+/* Dans une étiquette du frigo. */
+.sm {
+  width: 20px;
+  height: 20px;
+  font-size: 17px;
+}
+/* Pastille dans la revue du scan photo. */
+.md {
+  width: 40px;
+  height: 40px;
+  font-size: 24px;
+  border-radius: var(--radius-md);
+  background: var(--surface-inset);
+}

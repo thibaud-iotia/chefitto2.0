@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { FoodIcon } from '../components/FoodIcon';
 import { Camera, Images } from '../components/icons';
 import { MAX_IMAGES, type DetectedFood } from '../data/fridgeScan';
 import { prepareImage } from '../data/imagePrep';
@@ -114,6 +115,7 @@ export function FridgeScan() {
                 onChange={(e) => update(r.key, { selected: e.target.checked })}
                 aria-label={`Ajouter ${r.name || 'cet aliment'}`}
               />
+              <FoodIcon name={r.name} category={r.category} size="md" />
               <div className={s.scanFields}>
                 <input
                   className={s.scanName}

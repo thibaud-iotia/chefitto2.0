@@ -34,9 +34,14 @@ describe('Frigo — scan photo', () => {
     expect(screen.getByText('Déjà au frigo')).toBeInTheDocument();
     expect(screen.getByText('À vérifier')).toBeInTheDocument();
 
+    // Une image par ligne détectée, mise à jour quand on corrige le nom ou la catégorie.
+    const icons = () => within(screen.getByRole('region', { name: '3 aliments détectés' })).getAllByTestId('food-icon').map((i) => i.textContent);
+    expect(icons()).toEqual(['🥛', '🍅', '🍄']);
     const name = screen.getAllByRole('textbox', { name: "Nom de l'aliment" })[2]!;
     await user.clear(name);
+    expect(icons()[2]).toBe('🥗'); // nom vide : image de la catégorie
     await user.type(name, 'Champignon de Paris');
+    expect(icons()[2]).toBe('🍄');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Catégorie de Lait' }), 'Autre');
 
     await user.click(screen.getByRole('button', { name: 'Ajouter 2 aliments' }));

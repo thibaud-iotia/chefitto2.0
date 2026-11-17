@@ -208,6 +208,26 @@ describe('Frigo & suggestions', () => {
     expect(screen.getByRole('heading', { name: 'Mon frigo' })).toBeInTheDocument();
   });
 
+  it('affiche une image par aliment, masquée aux lecteurs d’écran', async () => {
+    const { user } = await renderApp({ route: '/fridge' });
+    const legumes = screen.getByRole('region', { name: 'Légume' });
+    const tomate = within(legumes).getByText('Tomate').closest('li')!;
+    expect(within(tomate).getByTestId('food-icon')).toHaveTextContent('🍅');
+    expect(within(tomate).getByTestId('food-icon')).toHaveAttribute('aria-hidden', 'true');
+    expect(within(tomate).getByRole('button')).toHaveAccessibleName('Retirer Tomate');
+    expect(screen.getAllByTestId('food-icon')).toHaveLength(6);
+
+    // Aliment inconnu : image de la catégorie choisie.
+    await user.click(screen.getByRole('button', { name: 'Poisson' }));
+    await user.type(screen.getByLabelText('Nouvel aliment'), 'espadon{Enter}');
+    await user.click(screen.getByRole('button', { name: 'Viande' }));
+    await user.type(screen.getByLabelText('Nouvel aliment'), 'caille{Enter}');
+    const poisson = await screen.findByRole('region', { name: 'Poisson' });
+    expect(within(poisson).getByTestId('food-icon')).toHaveTextContent('🐟');
+    const viande = await screen.findByRole('region', { name: 'Viande' });
+    expect(within(viande).getByTestId('food-icon')).toHaveTextContent('🥩');
+  });
+
   it('frigo vide', async () => {
     const { user } = await renderApp({ route: '/fridge' });
     for (const b of screen.getAllByRole('button', { name: /^Retirer / })) await user.click(b);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   sameFood,
+  foodKey,
   EMPTY_FORM,
   badgeTone,
   buildRecipeDraft,
@@ -207,5 +208,14 @@ describe('sameFood', () => {
     expect(sameFood('Lait', 'Laitue')).toBe(false);
     expect(sameFood('Riz', 'Ri')).toBe(false);
     expect(sameFood('', '')).toBe(false);
+  });
+});
+
+describe('foodKey', () => {
+  it('normalise et met chaque mot au singulier (mots de plus de 3 lettres)', () => {
+    expect(foodKey('Pommes de Terre')).toBe('pomme de terre');
+    expect(foodKey('Choux  Fleurs')).toBe('chou fleur');
+    expect(foodKey('Riz')).toBe('riz');
+    expect(foodKey('')).toBe('');
   });
 });

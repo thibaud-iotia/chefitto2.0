@@ -99,13 +99,16 @@ export function formatTime(min: number): string {
 
 /** Même aliment, au pluriel près (« Tomates » = « Tomate », « Poireaux » = « Poireau ») ; « Lait » ≠ « Laitue ». */
 export function sameFood(a: string, b: string): boolean {
-  const key = (s: string) =>
-    normalize(s)
-      .split(' ')
-      .map((w) => (w.length > 3 ? w.replace(/[sx]$/, '') : w))
-      .join(' ');
-  const ka = key(a);
-  return ka.length > 0 && ka === key(b);
+  const ka = foodKey(a);
+  return ka.length > 0 && ka === foodKey(b);
+}
+
+/** Clé de comparaison d'un aliment : normalisé, chaque mot au singulier (« Poireaux » → « poireau »). */
+export function foodKey(s: string): string {
+  return normalize(s)
+    .split(' ')
+    .map((w) => (w.length > 3 ? w.replace(/[sx]$/, '') : w))
+    .join(' ');
 }
 
 export function capitalize(s: string): string {

@@ -42,6 +42,7 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 | 28 | Garde-fous coût : JWT `authenticated` exigé, limiteur 30 analyses/h/utilisateur (mémoire d'instance), corps ≤ ~27 Mo, validation base64/type/taille | Inscription ouverte → éviter l'emballement de la facture API. Limiteur en mémoire = borne simple ; quota exact = table SQL si besoin. |
 | 29 | `_shared/fridgeScanContract.ts` sans dépendance, seul importé par l'app ; `@anthropic-ai/sdk` résolu par `fridge-scan/deno.json` (Deno) et npm (Node) | Le SDK ne doit jamais entrer dans le bundle navigateur (vérifié : budget JS inchangé). |
 | 30 | Réserve sous la barre de nav = pseudo-élément `.page::after` (112 px + safe-area), pas `padding-bottom` ; `fieldset` en `min-width: 0` | Sur iPhone, « Ajouter la recette » restait caché sous la barre : certains Safari iOS ignorent le padding de fin d'un conteneur flex scrollable. Un `fieldset` prend par défaut la largeur min-content de son contenu : le bloc « Étapes » débordait à droite sur 393 px (iPhone 16). Test e2e de non-régression. |
+| 31 | **Image des aliments du frigo = emoji Unicode** (≤ Emoji 14) choisi par mot-clé : `domain/foodIcons.ts` (`foodIcon(nom, catégorie)`), mots entiers via `foodKey` (accents, pluriel), mot-clé le plus long puis le premier ; sinon emoji de la catégorie. Composant `FoodIcon` décoratif (`aria-hidden`) dans les étiquettes du frigo et la revue du scan (suit les corrections en direct) | Zéro requête, zéro octet d'image, hors ligne, rendu natif iOS/Android ; une banque de photos (API tierce) coûterait réseau, quota et CSP pour un gain faible. « Pomme de terre » ≠ pomme, « Laitue » ≠ lait. |
 
 ## Tests
 
@@ -123,6 +124,9 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
   180 tests unitaires/intégration (97,8 % lignes), 36 E2E hors réseau (séquentiel), 9 E2E live. JS initial 101,5 KiB.
   Note : en parallèle (3 workers) sous Windows, quelques E2E échouent par intermittence (`ERR_ABORTED` au
   `goto`/`reload`), déjà le cas avant ce changement ; CI : 2 workers + 2 relances.
+
+- 2026-11-17 : images des aliments sur l'écran Frigo (ADR 31) : emoji par aliment (~250 mots-clés, repli par catégorie),
+  aussi dans la revue du scan photo. 234 tests unitaires, E2E frigo + axe verts (iPhone + Android). Aucun impact bundle notable.
 
 ## Pistes V2
 

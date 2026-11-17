@@ -29,6 +29,12 @@ test('le frigo pilote les suggestions et persiste après rechargement', async ({
   await page.getByRole('button', { name: 'Légume' }).click();
   await page.getByRole('button', { name: 'Ajouter au frigo' }).click();
   await expect(page.getByRole('region', { name: 'Poisson' })).toContainText('Espadon');
+  // Image de chaque aliment : emoji reconnu, sinon celui de la catégorie (espadon → poisson).
+  await expect(page.getByRole('listitem').filter({ hasText: 'Tomate' }).getByTestId('food-icon')).toHaveText('🍅');
+  await expect(page.getByRole('listitem').filter({ hasText: 'Asperge' }).getByTestId('food-icon')).toHaveText('🥬');
+  await expect(page.getByRole('region', { name: 'Poisson' }).getByTestId('food-icon')).toHaveText('🐟');
+  const icon = (await page.getByRole('listitem').filter({ hasText: 'Tomate' }).getByTestId('food-icon').boundingBox())!;
+  expect(icon.width).toBeGreaterThan(0); // réellement rendue (police emoji présente)
 
   await page.reload();
   await expect(page.getByRole('region', { name: 'Poisson' })).toContainText('Espadon');

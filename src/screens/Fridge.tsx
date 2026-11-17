@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
+import { FoodIcon } from '../components/FoodIcon';
 import { cookableCount, groupFridge } from '../domain/logic';
 import { FOOD_CATEGORIES, type FoodCategory } from '../domain/types';
 import { useApp } from '../store/storeContext';
@@ -62,6 +63,7 @@ export default function Fridge() {
             {g.items.map((f) => (
               <li key={f.id}>
                 <Tag onRemove={() => removeFridgeItem(f.id)} removeLabel={`Retirer ${f.name}`}>
+                  <FoodIcon name={f.name} category={f.category} />
                   {f.name}
                 </Tag>
               </li>
