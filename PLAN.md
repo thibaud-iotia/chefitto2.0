@@ -81,6 +81,9 @@ contextuelle (Modifier si une seule recette, Supprimer avec confirmation). Déta
 - [x] Tests unitaires (domaine, repos, store, écrans) + E2E (vrai appui long tactile via CDP, axe), doc
 - [x] Correctif : en mode sélection, le `<button>` posé sur la carte gardait le fond natif (`buttonface`) et masquait
       l'image (Chromium) ; styles natifs remis à zéro dans `.dishCardLink`, E2E vérifie le fond transparent
+- [x] Correctif iPhone : l'appui long sur la carte ouvrait l'aperçu de lien de Safari (`-webkit-touch-callout`
+      ne l'empêche pas sur un `<a href>`). La carte n'a plus de `href` : élément `role="link"` focusable qui
+      ouvre la fiche au clic et à Entrée (on perd « ouvrir dans un onglet », sans intérêt dans la PWA)
 
 ## Tests
 

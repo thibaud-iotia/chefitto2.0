@@ -165,6 +165,7 @@ export default function Home() {
                   pct={matchPct(d, fridge)}
                   fav={favorites.includes(d.id)}
                   onFav={() => toggleFavorite(d.id)}
+                  onOpen={() => navigate(`/recipe/${d.id}`)}
                   selecting={selecting}
                   selected={selected.includes(d.id)}
                   autoFocus={focusId === d.id}
@@ -226,6 +227,8 @@ interface DishCardProps {
   pct: number;
   fav: boolean;
   onFav: () => void;
+  /** Ouvre la fiche de la recette. */
+  onOpen: () => void;
   /** Mode sélection : un appui coche / décoche la carte au lieu d'ouvrir la recette. */
   selecting: boolean;
   selected: boolean;
@@ -235,7 +238,7 @@ interface DishCardProps {
   onToggle: () => void;
 }
 
-function DishCard({ recipe, pct, fav, onFav, selecting, selected, autoFocus, onLongPress, onToggle }: DishCardProps) {
+function DishCard({ recipe, pct, fav, onFav, onOpen, selecting, selected, autoFocus, onLongPress, onToggle }: DishCardProps) {
   const press = useLongPress(onLongPress);
   return (
     <li className={`${s.card} ${s.clickable} ${s.dishCard} ${selected ? s.dishCardSelected : ''}`} {...press}>
@@ -243,7 +246,20 @@ function DishCard({ recipe, pct, fav, onFav, selecting, selected, autoFocus, onL
       {selecting ? (
         <button type="button" className={s.dishCardLink} aria-pressed={selected} aria-label={recipe.name} autoFocus={autoFocus} onClick={onToggle} />
       ) : (
-        <Link to={`/recipe/${recipe.id}`} className={s.dishCardLink} aria-label={recipe.name} draggable={false} />
+        // Pas de vrai <a href> : sur iPhone, l'appui long sur un lien ouvre l'aperçu de Safari
+        // (-webkit-touch-callout n'y fait rien) au lieu de sélectionner la carte.
+        <div
+          role="link"
+          tabIndex={0}
+          className={s.dishCardLink}
+          aria-label={recipe.name}
+          onClick={onOpen}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            onOpen();
+          }}
+        />
       )}
       {selecting ? (
         <span className={s.selectMark} aria-hidden="true">

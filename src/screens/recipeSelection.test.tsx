@@ -55,6 +55,17 @@ describe('Accueil — sélection par appui long', () => {
     expect(screen.getByRole('link', { name: VEGGIE })).toBeInTheDocument();
   });
 
+  it('la carte n\'est pas un vrai lien href (aperçu Safari iOS à l\'appui long) mais s\'ouvre au clic et à Entrée', async () => {
+    const { user } = await renderApp({ route: '/home' });
+    const card = screen.getByRole('link', { name: VEGGIE });
+    expect(card).not.toHaveAttribute('href');
+    expect(card).toHaveAttribute('tabindex', '0');
+
+    card.focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('heading', { level: 1, name: VEGGIE })).toBeInTheDocument();
+  });
+
   it('décocher la dernière recette quitte le mode sélection', async () => {
     const { user } = await renderApp({ route: '/home' });
     longPress(VEGGIE);

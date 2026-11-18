@@ -323,6 +323,8 @@ test('appui long sur une carte : sélectionner, modifier, supprimer (persistant)
   const card = (name: string) => page.getByRole('list', { name: 'Recettes' }).getByRole('listitem').filter({ hasText: name });
   const bar = page.getByRole('group', { name: 'Recettes sélectionnées' });
 
+  // Pas de href sur la carte : sinon Safari iOS ouvre son aperçu de lien à l'appui long.
+  await expect(page.getByRole('link', { name: 'Spicy fish sauce' })).not.toHaveAttribute('href');
   // Un appui court ouvre toujours la recette.
   await page.getByRole('link', { name: 'Spicy fish sauce' }).tap();
   await expect(page.getByRole('heading', { level: 1, name: 'Spicy fish sauce' })).toBeVisible();
