@@ -1,5 +1,5 @@
 import { SEED_FRIDGE, SEED_RECIPES } from '../domain/seed';
-import { planKey } from '../domain/logic';
+import { planKey, withoutRecipes } from '../domain/logic';
 import { clampServings, DEFAULT_HOUSEHOLD, DEFAULT_SERVINGS } from '../domain/servings';
 import type { FoodCategory, FridgeItem, Profile, Recipe, RecipeDraft, User, UserData } from '../domain/types';
 import { RepositoryError, type Repository } from './repository';
@@ -138,6 +138,23 @@ export class LocalRepository implements Repository {
       d.recipes.unshift(recipe);
     });
     return recipe;
+  }
+
+  async updateRecipe(user: User, recipeId: string, draft: RecipeDraft): Promise<void> {
+    await this.tick();
+    this.mutate(user, (d) => {
+      if (!d.recipes.some((r) => r.id === recipeId)) throw new RepositoryError('Recette introuvable');
+      d.recipes = d.recipes.map((r) => (r.id === recipeId ? { ...draft, id: recipeId } : r));
+    });
+  }
+
+  async deleteRecipes(user: User, recipeIds: readonly string[]): Promise<void> {
+    await this.tick();
+    const ids = new Set(recipeIds);
+    this.mutate(user, (d) => {
+      d.recipes = d.recipes.filter((r) => !ids.has(r.id));
+      Object.assign(d, withoutRecipes(d.plan, d.favorites, ids));
+    });
   }
 
   async setRecipeImage(user: User, recipeId: string, imageUrl: string | null): Promise<void> {

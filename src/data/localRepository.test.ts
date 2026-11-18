@@ -108,4 +108,33 @@ describe('LocalRepository', () => {
     });
     expect((await repo.loadAll(u)).recipes.find((x) => x.id === r.id)?.imageUrl).toBe('https://img.test/tarte.webp');
   });
+
+  it('modifie une recette, erreur si elle n’existe plus', async () => {
+    const repo = new LocalRepository();
+    const u = await repo.signIn('a@b.fr');
+    const [first, second] = (await repo.loadAll(u)).recipes;
+    await repo.updateRecipe(u, first!.id, { ...first!, name: 'Tarte revisitée', servings: 2 });
+    const after = (await repo.loadAll(u)).recipes;
+    expect(after[0]).toEqual({ ...first!, name: 'Tarte revisitée', servings: 2 });
+    expect(after[1]).toEqual(second); // ordre et autres recettes inchangés
+    await expect(repo.updateRecipe(u, 'inconnue', first!)).rejects.toThrow('Recette introuvable');
+  });
+
+  it('supprime des recettes avec leurs favoris et créneaux du planning', async () => {
+    const repo = new LocalRepository();
+    const u = await repo.signIn('a@b.fr');
+    const [a, b, c] = (await repo.loadAll(u)).recipes;
+    await repo.setFavorite(u, a!.id, true);
+    await repo.setFavorite(u, c!.id, true);
+    await repo.setPlanEntry(u, 0, 0, a!.id);
+    await repo.setPlanEntry(u, 1, 1, b!.id);
+    await repo.setPlanEntry(u, 2, 0, c!.id);
+    await repo.deleteRecipes(u, [a!.id, b!.id]);
+    const d = await repo.loadAll(u);
+    expect(d.recipes.map((r) => r.id)).not.toContain(a!.id);
+    expect(d.recipes.map((r) => r.id)).not.toContain(b!.id);
+    expect(d.recipes).toHaveLength(6);
+    expect(d.favorites).toEqual([c!.id]);
+    expect(d.plan).toEqual({ '2-0': c!.id });
+  });
 });

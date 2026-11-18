@@ -10,6 +10,7 @@ import AddRecipe from './screens/AddRecipe';
 import Auth from './screens/Auth';
 import Cook from './screens/Cook';
 import Detail from './screens/Detail';
+import EditRecipe from './screens/EditRecipe';
 import Fridge from './screens/Fridge';
 import Home from './screens/Home';
 import ImportRecipe from './screens/ImportRecipe';
@@ -68,6 +69,7 @@ export default function App({ demo = false }: { demo?: boolean }) {
         <Route path="/home" element={<Home />} />
         <Route path="/recipe/:id" element={<Detail />} />
         <Route path="/recipe/:id/cook" element={<Cook />} />
+        <Route path="/recipe/:id/edit" element={<EditRecipe />} />
         <Route path="/planning" element={<Planning />} />
         <Route path="/fridge" element={<Fridge />} />
         <Route path="/suggestions" element={<Suggestions />} />

@@ -1,5 +1,5 @@
 import { createStore } from 'zustand/vanilla';
-import { capitalize, planKey, sameFood } from '../domain/logic';
+import { capitalize, planKey, sameFood, withoutRecipes } from '../domain/logic';
 import { clampServings, DEFAULT_HOUSEHOLD } from '../domain/servings';
 import type { FoodCategory, FridgeItem, Plan, Profile, Recipe, RecipeDraft, User } from '../domain/types';
 import type { Repository } from '../data/repository';
@@ -45,6 +45,10 @@ export interface AppActions {
   removeFridgeItem(id: string): Promise<void>;
   setPlanEntry(day: number, meal: number, recipeId: string | null): Promise<void>;
   addRecipe(draft: RecipeDraft): Promise<Recipe | null>;
+  /** Modifie une recette (mise à jour optimiste). `false` en cas d'échec, avec un message. */
+  updateRecipe(recipeId: string, draft: RecipeDraft): Promise<boolean>;
+  /** Supprime des recettes, et avec elles leurs favoris et créneaux du planning. `false` en cas d'échec. */
+  deleteRecipes(recipeIds: readonly string[]): Promise<boolean>;
   /**
    * Cherche et mémorise une photo pour une recette qui n'en a pas (une seule tentative par session).
    * Avec `brokenUrl` : la photo actuelle ne se charge plus, on en cherche une autre.
@@ -102,18 +106,20 @@ export function createAppStore(
       return loading;
     };
 
-    /** Applique un patch local, appelle le serveur, restaure si échec. */
-    const optimistic = async (patch: (s: AppState) => Partial<AppState>, call: (u: User) => Promise<unknown>) => {
+    /** Applique un patch local, appelle le serveur, restaure si échec. Renvoie `true` si le serveur a accepté. */
+    const optimistic = async (patch: (s: AppState) => Partial<AppState>, call: (u: User) => Promise<unknown>): Promise<boolean> => {
       const user = get().user;
-      if (!user) return;
+      if (!user) return false;
       const before = get();
       const snapshot = { recipes: before.recipes, favorites: before.favorites, fridge: before.fridge, plan: before.plan, profile: before.profile };
       set(patch(before));
       try {
         await call(user);
+        return true;
       } catch (e) {
         set(snapshot);
         fail(e);
+        return false;
       }
     };
 
@@ -186,9 +192,9 @@ export function createAppStore(
         if (u) await load(u);
       },
 
-      toggleFavorite(recipeId) {
+      async toggleFavorite(recipeId) {
         const on = !get().favorites.includes(recipeId);
-        return optimistic(
+        await optimistic(
           (s) => ({ favorites: on ? [...s.favorites, recipeId] : s.favorites.filter((id) => id !== recipeId) }),
           (u) => repo.setFavorite(u, recipeId, on),
         );
@@ -240,15 +246,15 @@ export function createAppStore(
         }
       },
 
-      removeFridgeItem(id) {
-        return optimistic(
+      async removeFridgeItem(id) {
+        await optimistic(
           (s) => ({ fridge: s.fridge.filter((f) => f.id !== id) }),
           (u) => repo.removeFridgeItem(u, id),
         );
       },
 
-      setPlanEntry(day, meal, recipeId) {
-        return optimistic(
+      async setPlanEntry(day, meal, recipeId) {
+        await optimistic(
           (s) => {
             const plan = { ...s.plan };
             if (recipeId) plan[planKey(day, meal)] = recipeId;
@@ -270,6 +276,22 @@ export function createAppStore(
           fail(e);
           return null;
         }
+      },
+
+      updateRecipe(recipeId, draft) {
+        return optimistic(
+          (s) => ({ recipes: s.recipes.map((r) => (r.id === recipeId ? { ...draft, id: recipeId } : r)) }),
+          (u) => repo.updateRecipe(u, recipeId, draft),
+        );
+      },
+
+      deleteRecipes(recipeIds) {
+        const ids = new Set(recipeIds);
+        if (ids.size === 0) return Promise.resolve(true);
+        return optimistic(
+          (s) => ({ recipes: s.recipes.filter((r) => !ids.has(r.id)), ...withoutRecipes(s.plan, s.favorites, ids), sheet: null }),
+          (u) => repo.deleteRecipes(u, [...ids]),
+        );
       },
 
       async ensureRecipeImage(recipeId, brokenUrl) {
@@ -312,7 +334,9 @@ export function createAppStore(
         return optimistic(
           () => ({ profile }),
           (u) => repo.updateProfile(u, profile),
-        ).then(() => get().flash('Profil mis à jour'));
+        ).then((ok) => {
+          if (ok) get().flash('Profil mis à jour');
+        });
       },
 
       flash(text) {

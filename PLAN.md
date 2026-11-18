@@ -48,6 +48,10 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 | 34 | **Recalcul à l'affichage seulement** (`domain/servings.ts`, `scaleIngredient`) : seule la quantité de tête est modifiée (ou après « Libellé : ») ; entiers, décimales FR, `1/2`, `½`, `1 ½`, plages `2-3` / `2 à 3` ; arrondi cuisine (≥ 100 → à 5 près, ≥ 10 → entier, sinon fraction usuelle ¼ ⅓ ½ ⅔ ¾ ou décimale si l'original l'était) ; le frigo est comparé au texte d'origine | Texte libre importé : on ne réécrit jamais la recette (aller-retour sans perte). « 1 boîte de 400 g » → « 2 boîte de 400 g » (pas d'accord du nom : le français est trop irrégulier pour le deviner sans risque). |
 | 35 | Fiche : s'ouvre **pour le foyer**, stepper − / + (`Stepper` dans `src/ui`, `role=group`, valeur `aria-live`), note « Quantités recalculées · recette prévue pour N » + « Revenir à N » seulement si une quantité change | Les recettes de départ n'ont pas de quantités : pas de note inutile. |
 | 36 | Colonnes optionnelles (`image_url`, `servings`, `household`) : écriture réessayée **sans la colonne** si PostgREST la dit inconnue (message contenant « column ») ; lecture du profil en `select('*')` | Front déployable avant la migration SQL ; une violation de contrainte reste une vraie erreur (non masquée). |
+| 37 | **Appui long sur une carte de l'accueil = sélection** (500 ms, annulé si le doigt bouge de plus de 10 px). Hook `useLongPress` (`components/hooks.ts`) : événements pointeur + `contextmenu` (clic droit, touche Menu / Maj+F10, appui long Android) ; le clic émis au relâchement est annulé en phase de capture, sauf clic clavier (`detail === 0`). CSS `-webkit-touch-callout: none` + `user-select: none` sur la carte | Geste natif attendu sur mobile (Google Photos, Gmail). Sans le callout désactivé, iOS ouvre l'aperçu du lien ; sans l'annulation du clic, le relâchement ouvrirait la recette ou décocherait la carte. Le menu contextuel donne un accès clavier / souris. |
+| 38 | **Mode sélection = au moins une recette cochée** (multi-sélection) : le lien de la carte devient un bouton `aria-pressed`, le cœur une pastille ; barre d'actions contextuelle **en haut** (par-dessus l'en-tête, hors défilement) : Annuler · « N sélectionnée(s) » · Modifier (une seule recette) · Supprimer, en **icônes** 44 px avec libellés accessibles. Échap, « Annuler », décocher la dernière carte ou changer de filtre / recherche quittent la sélection ; le focus reste sur la carte à l'origine | En bas, la barre se battait avec la navigation et le bouton « + » qui dépasse. Libellés texte + compteur ne tiennent pas sur 393 px. Changer de filtre vide la sélection : on ne supprime jamais une recette qu'on ne voit plus. |
+| 39 | **Suppression confirmée** (bottom sheet : « Supprimer définitivement » / « Annuler », sous-titre « retirée(s) du planning » si un repas planifié est concerné, sinon « irréversible »), optimiste avec retour arrière ; `deleteRecipes` en une requête (`delete … in (ids)`), favoris et créneaux du planning supprimés par `on delete cascade` (déjà dans le schéma) et retirés localement (`withoutRecipes`) | Action destructrice sans corbeille : une confirmation suffit (pas d'annulation différée à maintenir). Aucune migration SQL : RLS `for all` et cascades existaient déjà. |
+| 40 | **Modification** = route `#/recipe/:id/edit`, même formulaire que « Nouvelle recette » (`RecipeFields`) sur un store de formulaire **propre à l'écran** (`createRecipeFormStore`, `recipeToForm`) ; temps, niveau, coût et photo conservés ; `updateRecipe` optimiste. Supabase : `update … select('id')`, 0 ligne → « Recette introuvable » ; `image_url` toujours envoyée (même `null`), colonnes optionnelles retirées si la base n'est pas migrée | Le brouillon de création (conservé pendant l'import) n'est jamais écrasé. Sans `select`, une recette supprimée sur un autre appareil serait « enregistrée » sans erreur. |
 
 ## Nombre de personnes (terminé le 2026-11-18)
 
@@ -63,6 +67,20 @@ pas de nombre de personnes par repas du planning (piste V2). Détails : ADR 33-3
 - [x] Repos Supabase / local (anciennes données sans champ → valeurs par défaut)
 - [x] UI : composant `Stepper`, fiche (stepper + quantités recalculées), formulaire, Profil
 - [x] Tests unitaires + E2E, doc
+
+## Supprimer / modifier une recette (terminé le 2026-11-18)
+
+Choix : appui long sur une carte de l'accueil pour la sélectionner (multi-sélection), barre d'actions
+contextuelle (Modifier si une seule recette, Supprimer avec confirmation). Détails : ADR 37-40.
+
+- [x] Repository : `updateRecipe`, `deleteRecipes` (local + Supabase, cascade SQL existante, aucune migration)
+- [x] Store : `updateRecipe` / `deleteRecipes` optimistes (`optimistic` renvoie désormais un booléen) ;
+      « Profil mis à jour » n'est plus affiché quand l'enregistrement du profil échoue
+- [x] Hook `useLongPress` (pointeur + menu contextuel, clic de relâchement annulé)
+- [x] Accueil : mode sélection, barre d'actions, confirmation ; écran « Modifier la recette » (`RecipeFields` partagé)
+- [x] Tests unitaires (domaine, repos, store, écrans) + E2E (vrai appui long tactile via CDP, axe), doc
+- [x] Correctif : en mode sélection, le `<button>` posé sur la carte gardait le fond natif (`buttonface`) et masquait
+      l'image (Chromium) ; styles natifs remis à zéro dans `.dishCardLink`, E2E vérifie le fond transparent
 
 ## Tests
 
@@ -93,6 +111,7 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
 | Auth (connexion / inscription) | `#/auth` | ☑ |
 | Accueil | `#/home` | ☑ |
 | Détail recette | `#/recipe/:id` | ☑ |
+| Modifier la recette (appui long › Modifier) | `#/recipe/:id/edit` | ☑ |
 | Mode cuisine | `#/recipe/:id/cook` | ☑ |
 | Planning | `#/planning` | ☑ |
 | Frigo | `#/fridge` | ☑ |
@@ -155,12 +174,18 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
   307 tests unitaires/intégration (96,5 % lignes), 42 E2E hors réseau verts (iPhone + Android, axe sur la fiche recalculée),
   E2E live Marmiton verts. JS initial 107,9 KiB / 130.
 
+- 2026-11-18 : supprimer / modifier une recette par appui long sur sa carte (ADR 37-40). Multi-sélection,
+  barre d'actions contextuelle, confirmation, formulaire de modification partagé avec la création.
+  335 tests unitaires/intégration (95,8 % lignes), 44 E2E hors réseau verts (iPhone + Android, appui long tactile réel, axe
+  en mode sélection et sur le formulaire). JS initial 109,6 KiB / 130.
+
 ## Pistes V2
 
 - Nombre de personnes par repas du planning (ex. mardi soir pour 6), utilisé à l'ouverture de la fiche depuis le planning.
 - Liste de courses : additionner les quantités recalculées des recettes planifiées.
 - Choisir / prendre sa propre photo pour une recette (upload Supabase Storage), en plus de la photo automatique.
-- Suppression / édition de recette, liste de courses générée depuis les « À acheter ».
+- Liste de courses générée depuis les « À acheter ».
+- Sélection : « Tout sélectionner », annulation différée (« Annuler » dans le toast) au lieu de la confirmation.
 - Planning multi-semaines (actuellement une semaine type).
 - Web Share Target (PWA) : « Partager › Chefitto » depuis Marmiton ouvre directement l'import du lien.
 - Limitation de débit sur l'Edge Function si l'app est ouverte à d'autres utilisateurs.

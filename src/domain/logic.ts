@@ -213,6 +213,32 @@ export function buildRecipeDraft(form: RecipeForm, defaultServings: number = DEF
   };
 }
 
+/**
+ * Formulaire pré-rempli pour modifier une recette existante. Temps, niveau et coût sont conservés
+ * (non éditables dans le formulaire) ; les valeurs de remplissage de `buildRecipeDraft` redeviennent vides.
+ */
+export function recipeToForm(r: Recipe): RecipeForm {
+  const ingredients = r.ingredients.filter((i) => i.trim() && i !== '—');
+  return {
+    name: r.name,
+    category: r.category,
+    ingredients: ingredients.join('\n'),
+    description: r.description === 'Ma recette.' ? '' : r.description,
+    steps: r.steps.length ? [...r.steps] : [''],
+    meta: { timeMin: r.timeMin, level: r.level, price: r.price, source: null },
+    servings: r.servings,
+    imageUrl: safeImageUrl(r.imageUrl),
+  };
+}
+
+/** Ids présents dans le plan et les favoris, sans les recettes supprimées. */
+export function withoutRecipes(plan: Plan, favorites: readonly string[], ids: ReadonlySet<string>): { plan: Plan; favorites: string[] } {
+  return {
+    plan: Object.fromEntries(Object.entries(plan).filter(([, id]) => !ids.has(id))),
+    favorites: favorites.filter((id) => !ids.has(id)),
+  };
+}
+
 export function moveItem<T>(arr: readonly T[], index: number, dir: -1 | 1): T[] {
   const j = index + dir;
   if (index < 0 || index >= arr.length || j < 0 || j >= arr.length) return arr.slice();

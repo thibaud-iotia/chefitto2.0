@@ -220,6 +220,22 @@ export class SupabaseRepository implements Repository {
     return toRecipe(check(res));
   }
 
+  async updateRecipe(_user: User, recipeId: string, draft: RecipeDraft): Promise<void> {
+    // `image_url` explicite (même `null`) : une modification ne doit pas laisser une ancienne photo.
+    const row: Record<string, unknown> = { ...toRecipeRow(draft), image_url: safeImageUrl(draft.imageUrl) };
+    const updated = check(
+      await withOptionalColumns([row], ([r]) => this.sb.from('recipes').update(r!).eq('id', recipeId).select('id')),
+    ) as { id: string }[] | null;
+    // RLS : 0 ligne si la recette a été supprimée (autre appareil) ou n'appartient pas à l'utilisateur.
+    if (!updated?.length) throw new RepositoryError('Recette introuvable');
+  }
+
+  async deleteRecipes(_user: User, recipeIds: readonly string[]): Promise<void> {
+    if (recipeIds.length === 0) return;
+    // Favoris et créneaux du planning : `on delete cascade` côté Postgres.
+    check(await this.sb.from('recipes').delete().in('id', [...recipeIds]));
+  }
+
   async setRecipeImage(_user: User, recipeId: string, imageUrl: string | null): Promise<void> {
     check(await this.sb.from('recipes').update({ image_url: safeImageUrl(imageUrl) }).eq('id', recipeId));
   }

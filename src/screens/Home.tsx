@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { RecipeImage } from '../components/RecipeImage';
-import { Heart, Search } from '../components/icons';
+import { BottomSheet } from '../components/Shell';
+import { useLongPress } from '../components/hooks';
+import { Check, Close, Heart, Pencil, Search, Trash } from '../components/icons';
 import {
   badgeTone,
   filterRecipes,
@@ -14,12 +16,12 @@ import {
 } from '../domain/logic';
 import { SLOTS_PER_WEEK, type Recipe } from '../domain/types';
 import { useApp } from '../store/storeContext';
-import { Avatar, Badge, Tabs } from '../ui';
+import { Avatar, Badge, IconButton, Tabs } from '../ui';
 import s from './screens.module.css';
 
 export default function Home() {
   const navigate = useNavigate();
-  const { recipes, fridge, favorites, plan, profile, toggleFavorite } = useApp(
+  const { recipes, fridge, favorites, plan, profile, toggleFavorite, deleteRecipes, flash } = useApp(
     useShallow((st) => ({
       recipes: st.recipes,
       fridge: st.fridge,
@@ -27,116 +29,237 @@ export default function Home() {
       plan: st.plan,
       profile: st.profile,
       toggleFavorite: st.toggleFavorite,
+      deleteRecipes: st.deleteRecipes,
+      flash: st.flash,
     })),
   );
   const [cat, setCat] = useState<CategoryFilter>('all');
   const [query, setQuery] = useState('');
+  // Sélection par appui long : on est en mode sélection tant qu'au moins une recette est cochée.
+  const [picked, setPicked] = useState<string[]>([]);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const selected = useMemo(() => picked.filter((id) => recipes.some((r) => r.id === id)), [picked, recipes]);
+  const selecting = selected.length > 0;
 
   const best = useMemo(() => rankBySuggestion(recipes, fridge)[0], [recipes, fridge]);
   const shown = useMemo(() => filterRecipes(recipes, { category: cat, query, favorites }), [recipes, cat, query, favorites]);
   const planned = plannedCount(plan, new Set(recipes.map((r) => r.id)));
   const firstName = profile.name.split(' ')[0] || 'chef';
+  const single = selected.length === 1 ? recipes.find((r) => r.id === selected[0]) : undefined;
+  const inPlan = Object.values(plan).some((id) => selected.includes(id));
+
+  const startSelection = (id: string) => {
+    setPicked((p) => (p.includes(id) ? p : [...p, id]));
+    setFocusId(id);
+  };
+  const toggleSelection = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const clearSelection = () => {
+    setPicked([]);
+    setConfirming(false);
+  };
+  // Changer de filtre vide la sélection : on ne supprime jamais une recette qu'on ne voit plus.
+  const changeCategory = (c: CategoryFilter) => {
+    setCat(c);
+    setPicked([]);
+  };
+  const changeQuery = (q: string) => {
+    setQuery(q);
+    setPicked([]);
+  };
+
+  // Échap quitte le mode sélection (si la confirmation est ouverte, Échap la ferme d'abord).
+  useEffect(() => {
+    if (!selecting || confirming) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setPicked([]);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selecting, confirming]);
+
+  async function removeSelected() {
+    const ids = selected;
+    setConfirming(false);
+    if (!(await deleteRecipes(ids))) return; // échec : message du store, sélection conservée
+    setPicked([]);
+    flash(ids.length === 1 ? 'Recette supprimée' : `${ids.length} recettes supprimées`);
+  }
 
   return (
-    <main className={`${s.page} ${s.pageFlush}`}>
-      <header className={s.homeHead}>
-        <div>
-          <p className={s.hello}>Bonjour {firstName}</p>
-          <h1 className={s.homeTitle}>
-            Que cuisine-t-on
-            <br />
-            ce soir&nbsp;?
-          </h1>
-        </div>
-        <button type="button" className={s.avatarBtn} onClick={() => navigate('/profile', { replace: true })} aria-label="Mon profil">
-          <Avatar name={profile.name} size="lg" ring />
-        </button>
-      </header>
-
-      {best && (
-        <button type="button" className={s.hero} onClick={() => navigate(`/recipe/${best.id}`)}>
-          <div className={s.heroBody}>
-            <span className={s.heroOver}>PRÊT AVEC VOTRE FRIGO</span>
-            <span className={s.heroName}>{best.name}</span>
-            <span style={{ fontSize: 14 }}>
-              {matchPct(best, fridge)}% au frigo · <span className={s.mono}>{formatTime(best.timeMin)}</span>
-            </span>
-            <span className={s.heroCta}>Voir la recette</span>
+    <>
+      <main className={`${s.page} ${s.pageFlush}`}>
+        <header className={s.homeHead}>
+          <div>
+            <p className={s.hello}>Bonjour {firstName}</p>
+            <h1 className={s.homeTitle}>
+              Que cuisine-t-on
+              <br />
+              ce soir&nbsp;?
+            </h1>
           </div>
-          <RecipeImage recipe={best} size={104} className={s.heroPlate} eager />
-        </button>
-      )}
+          <button type="button" className={s.avatarBtn} onClick={() => navigate('/profile', { replace: true })} aria-label="Mon profil">
+            <Avatar name={profile.name} size="lg" ring />
+          </button>
+        </header>
 
-      <div className={s.stats}>
-        <Link to="/fridge" replace className={`${s.card} ${s.stat}`}>
-          <span className={s.statValue}>{fridge.length}</span>
-          <span className={s.statLabel}>aliments au frigo</span>
-        </Link>
-        <Link to="/planning" replace className={`${s.card} ${s.stat}`}>
-          <span className={s.statValue}>
-            {planned}
-            <small>/{SLOTS_PER_WEEK}</small>
-          </span>
-          <span className={s.statLabel}>repas planifiés</span>
-        </Link>
-      </div>
+        {best && (
+          <button type="button" className={s.hero} onClick={() => navigate(`/recipe/${best.id}`)}>
+            <div className={s.heroBody}>
+              <span className={s.heroOver}>PRÊT AVEC VOTRE FRIGO</span>
+              <span className={s.heroName}>{best.name}</span>
+              <span style={{ fontSize: 14 }}>
+                {matchPct(best, fridge)}% au frigo · <span className={s.mono}>{formatTime(best.timeMin)}</span>
+              </span>
+              <span className={s.heroCta}>Voir la recette</span>
+            </div>
+            <RecipeImage recipe={best} size={104} className={s.heroPlate} eager />
+          </button>
+        )}
 
-      <div className={s.filters}>
-        <label className={s.searchBox}>
-          <Search />
-          <span className="sr-only">Rechercher une recette</span>
-          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher une recette" />
-        </label>
-        <div className={s.tabsScroll}>
-          <Tabs<CategoryFilter>
-            label="Catégories"
-            value={cat}
-            onChange={setCat}
-            tabs={[
-              { value: 'all', label: 'Tout' },
-              { value: 'Entrées', label: 'Entrées' },
-              { value: 'Plats', label: 'Plats' },
-              { value: 'Desserts', label: 'Desserts' },
-              { value: 'Boissons', label: 'Boissons' },
-              { value: 'fav', label: 'Favoris', count: favorites.length },
-            ]}
-          />
+        <div className={s.stats}>
+          <Link to="/fridge" replace className={`${s.card} ${s.stat}`}>
+            <span className={s.statValue}>{fridge.length}</span>
+            <span className={s.statLabel}>aliments au frigo</span>
+          </Link>
+          <Link to="/planning" replace className={`${s.card} ${s.stat}`}>
+            <span className={s.statValue}>
+              {planned}
+              <small>/{SLOTS_PER_WEEK}</small>
+            </span>
+            <span className={s.statLabel}>repas planifiés</span>
+          </Link>
         </div>
-      </div>
 
-      {shown.length > 0 ? (
-        <ul className={s.grid} style={{ listStyle: 'none', margin: 0 }} aria-label="Recettes">
-          {shown.map((d) => (
-            <DishCard
-              key={d.id}
-              recipe={d}
-              pct={matchPct(d, fridge)}
-              fav={favorites.includes(d.id)}
-              onFav={() => toggleFavorite(d.id)}
+        <div className={s.filters}>
+          <label className={s.searchBox}>
+            <Search />
+            <span className="sr-only">Rechercher une recette</span>
+            <input type="search" value={query} onChange={(e) => changeQuery(e.target.value)} placeholder="Rechercher une recette" />
+          </label>
+          <div className={s.tabsScroll}>
+            <Tabs<CategoryFilter>
+              label="Catégories"
+              value={cat}
+              onChange={changeCategory}
+              tabs={[
+                { value: 'all', label: 'Tout' },
+                { value: 'Entrées', label: 'Entrées' },
+                { value: 'Plats', label: 'Plats' },
+                { value: 'Desserts', label: 'Desserts' },
+                { value: 'Boissons', label: 'Boissons' },
+                { value: 'fav', label: 'Favoris', count: favorites.length },
+              ]}
             />
-          ))}
-        </ul>
-      ) : (
-        <p className={s.empty}>Aucune recette ici pour l'instant.</p>
+          </div>
+        </div>
+
+        {shown.length > 0 ? (
+          <>
+            <p id="dish-hint" className="sr-only">
+              Appui long, ou menu contextuel, sur une recette pour la sélectionner, puis la modifier ou la supprimer.
+            </p>
+            <ul className={s.grid} style={{ listStyle: 'none', margin: 0 }} aria-label="Recettes" aria-describedby="dish-hint">
+              {shown.map((d) => (
+                <DishCard
+                  key={d.id}
+                  recipe={d}
+                  pct={matchPct(d, fridge)}
+                  fav={favorites.includes(d.id)}
+                  onFav={() => toggleFavorite(d.id)}
+                  selecting={selecting}
+                  selected={selected.includes(d.id)}
+                  autoFocus={focusId === d.id}
+                  onLongPress={() => startSelection(d.id)}
+                  onToggle={() => toggleSelection(d.id)}
+                />
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className={s.empty}>Aucune recette ici pour l'instant.</p>
+        )}
+      </main>
+
+      {selecting && (
+        <div className={s.selectBar} role="group" aria-label="Recettes sélectionnées">
+          <IconButton label="Annuler la sélection" onClick={clearSelection}>
+            <Close />
+          </IconButton>
+          <span className={s.selectCount} aria-live="polite">
+            {selected.length} sélectionnée{selected.length > 1 ? 's' : ''}
+          </span>
+          <IconButton
+            label="Modifier"
+            className={s.selectBtn}
+            disabled={!single}
+            onClick={() => single && navigate(`/recipe/${single.id}/edit`)}
+          >
+            <Pencil size={20} />
+          </IconButton>
+          <IconButton label="Supprimer" className={`${s.selectBtn} ${s.selectBtnDanger}`} onClick={() => setConfirming(true)}>
+            <Trash size={20} />
+          </IconButton>
+        </div>
       )}
-    </main>
+
+      <BottomSheet
+        open={confirming && selecting}
+        title={single ? `Supprimer « ${single.name} » ?` : `Supprimer ${selected.length} recettes ?`}
+        onClose={() => setConfirming(false)}
+        items={[
+          {
+            key: 'confirm',
+            label: 'Supprimer définitivement',
+            // Prévenir quand la suppression vide aussi des repas du planning.
+            sub: inPlan ? `retirée${single ? '' : 's'} du planning` : 'irréversible',
+            subColor: 'var(--red-600)',
+            onPick: () => void removeSelected(),
+          },
+          { key: 'cancel', label: 'Annuler', onPick: () => setConfirming(false) },
+        ]}
+      />
+    </>
   );
 }
 
-function DishCard({ recipe, pct, fav, onFav }: { recipe: Recipe; pct: number; fav: boolean; onFav: () => void }) {
+interface DishCardProps {
+  recipe: Recipe;
+  pct: number;
+  fav: boolean;
+  onFav: () => void;
+  /** Mode sélection : un appui coche / décoche la carte au lieu d'ouvrir la recette. */
+  selecting: boolean;
+  selected: boolean;
+  /** Carte à l'origine de la sélection : garde le focus clavier quand le lien devient une case à cocher. */
+  autoFocus: boolean;
+  onLongPress: () => void;
+  onToggle: () => void;
+}
+
+function DishCard({ recipe, pct, fav, onFav, selecting, selected, autoFocus, onLongPress, onToggle }: DishCardProps) {
+  const press = useLongPress(onLongPress);
   return (
-    <li className={`${s.card} ${s.clickable} ${s.dishCard}`}>
+    <li className={`${s.card} ${s.clickable} ${s.dishCard} ${selected ? s.dishCardSelected : ''}`} {...press}>
       <RecipeImage recipe={recipe} size={132} className={s.dishCardPlate} />
-      <Link to={`/recipe/${recipe.id}`} className={s.dishCardLink} aria-label={recipe.name} />
-      <button
-        type="button"
-        className={s.favBtn}
-        onClick={onFav}
-        aria-pressed={fav}
-        aria-label={fav ? `Retirer ${recipe.name} des favoris` : `Ajouter ${recipe.name} aux favoris`}
-      >
-        <Heart filled={fav} />
-      </button>
+      {selecting ? (
+        <button type="button" className={s.dishCardLink} aria-pressed={selected} aria-label={recipe.name} autoFocus={autoFocus} onClick={onToggle} />
+      ) : (
+        <Link to={`/recipe/${recipe.id}`} className={s.dishCardLink} aria-label={recipe.name} draggable={false} />
+      )}
+      {selecting ? (
+        <span className={s.selectMark} aria-hidden="true">
+          {selected && <Check />}
+        </span>
+      ) : (
+        <button
+          type="button"
+          className={s.favBtn}
+          onClick={onFav}
+          aria-pressed={fav}
+          aria-label={fav ? `Retirer ${recipe.name} des favoris` : `Ajouter ${recipe.name} aux favoris`}
+        >
+          <Heart filled={fav} />
+        </button>
+      )}
       <h2 className={s.dishName}>{recipe.name}</h2>
       <div className={s.dishMeta}>
         <Badge tone={badgeTone(pct)}>{pct}%</Badge>

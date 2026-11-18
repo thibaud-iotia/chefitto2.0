@@ -1,4 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
+import type { Locator, Page } from '@playwright/test';
 import { PHOTO_ORIGIN, expect, photoUrl, test } from './fixtures';
 
 test('parcours complet : recette → planning → mode cuisine', async ({ loggedIn: page }) => {
@@ -304,4 +305,66 @@ test('fiche recette : les ingrédients ne passent jamais sous « Planifier » / 
   expect(last.y + last.height).toBeLessThanOrEqual(barBox.y);
   await cook.click({ trial: true });
   await plan.click({ trial: true });
+});
+
+/** Vrai appui long au doigt (événements tactiles CDP, comme sur le téléphone), puis relâchement. */
+async function longPress(page: Page, target: Locator, ms = 800) {
+  await target.scrollIntoViewIfNeeded(); // les événements tactiles CDP visent des coordonnées à l'écran
+  const box = (await target.boundingBox())!;
+  const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+  await page.waitForTimeout(ms);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+}
+
+test('appui long sur une carte : sélectionner, modifier, supprimer (persistant)', async ({ loggedIn: page }) => {
+  const card = (name: string) => page.getByRole('list', { name: 'Recettes' }).getByRole('listitem').filter({ hasText: name });
+  const bar = page.getByRole('group', { name: 'Recettes sélectionnées' });
+
+  // Un appui court ouvre toujours la recette.
+  await page.getByRole('link', { name: 'Spicy fish sauce' }).tap();
+  await expect(page.getByRole('heading', { level: 1, name: 'Spicy fish sauce' })).toBeVisible();
+  await page.goBack();
+
+  // Appui long : sélection, sans navigation ; la barre recouvre l'en-tête.
+  await longPress(page, card('Veggie tomato mix'));
+  await expect(bar).toContainText('1 sélectionnée');
+  await expect(page).toHaveURL(/#\/home$/);
+  await expect(page.getByRole('button', { name: 'Veggie tomato mix', pressed: true })).toBeVisible();
+  // Le bouton posé sur la carte reste transparent : l'image reste visible (régression : fond natif gris).
+  await expect(page.getByRole('button', { name: 'Veggie tomato mix', pressed: true })).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+
+  // Appui court en mode sélection : coche / décoche.
+  await page.getByRole('button', { name: 'Spicy fish sauce', pressed: false }).tap();
+  await expect(bar).toContainText('2 sélectionnées');
+  await expect(bar.getByRole('button', { name: 'Modifier' })).toBeDisabled();
+  const a11y = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+  expect(a11y.violations.map((v) => [v.id, v.nodes.map((n) => n.target)])).toEqual([]);
+  await page.getByRole('button', { name: 'Spicy fish sauce', pressed: true }).tap();
+
+  // Modifier.
+  await bar.getByRole('button', { name: 'Modifier' }).tap();
+  await expect(page.getByRole('heading', { name: 'Modifier la recette' })).toBeVisible();
+  await expect(page.getByLabel('Nom du plat')).toHaveValue('Veggie tomato mix');
+  const a11yEdit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+  expect(a11yEdit.violations.map((v) => [v.id, v.nodes.map((n) => n.target)])).toEqual([]);
+  await page.getByLabel('Nom du plat').fill('Veggie du jardin');
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByText('Recette modifiée')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Veggie du jardin' })).toBeVisible();
+  await expect(bar).toBeHidden();
+
+  // Supprimer, après confirmation.
+  await longPress(page, card('Veggie du jardin'));
+  await bar.getByRole('button', { name: 'Supprimer' }).tap();
+  await page.getByRole('dialog', { name: 'Supprimer « Veggie du jardin » ?' }).getByRole('button', { name: /Supprimer définitivement/ }).tap();
+  await expect(page.getByText('Recette supprimée')).toBeVisible();
+  await expect(card('Veggie du jardin')).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByRole('link', { name: 'Spicy fish sauce' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Veggie du jardin' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Veggie tomato mix' })).toHaveCount(0);
 });

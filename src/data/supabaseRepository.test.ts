@@ -16,7 +16,7 @@ function fakeClient(responses: Record<string, Resp[]>, auth: Partial<Record<stri
     const entry = { table, ops: [] as [string, unknown[]][] };
     calls.push(entry);
     const builder: Record<string, unknown> = {};
-    for (const op of ['select', 'insert', 'update', 'upsert', 'delete', 'eq', 'order']) {
+    for (const op of ['select', 'insert', 'update', 'upsert', 'delete', 'eq', 'in', 'order']) {
       builder[op] = (...args: unknown[]) => {
         entry.ops.push([op, args]);
         return builder;
@@ -212,6 +212,55 @@ describe('SupabaseRepository — données', () => {
       'plan_entries:delete',
       'profiles:update',
     ]);
+  });
+
+  it('modifie une recette : toutes les colonnes, photo explicite (même retirée)', async () => {
+    const { client, calls } = fakeClient({ recipes: [{ data: [{ id: 'r1' }], error: null }] });
+    await new SupabaseRepository(client).updateRecipe(user, 'r1', { ...toRecipe(row), name: 'Tarte fine', servings: 2 });
+    const [update, eq, select] = calls[0]!.ops;
+    expect(update![0]).toBe('update');
+    expect(update![1][0]).toMatchObject({ name: 'Tarte fine', time_min: 30, servings: 2, image_url: null });
+    expect(eq).toEqual(['eq', ['id', 'r1']]);
+    expect(select).toEqual(['select', ['id']]);
+  });
+
+  it('modifie une recette : introuvable (supprimée ailleurs / RLS) → erreur', async () => {
+    const { client } = fakeClient({ recipes: [{ data: [], error: null }] });
+    await expect(new SupabaseRepository(client).updateRecipe(user, 'r1', toRecipe(row))).rejects.toThrow('Recette introuvable');
+  });
+
+  it('modifie une recette sur une base pas encore migrée : réessaie sans les colonnes inconnues', async () => {
+    const { client, calls } = fakeClient({
+      recipes: [
+        { data: null, error: { message: "Could not find the 'image_url' column of 'recipes' in the schema cache" } },
+        { data: [{ id: 'r1' }], error: null },
+      ],
+    });
+    await new SupabaseRepository(client).updateRecipe(user, 'r1', toRecipe(row));
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.ops[0]![1][0]).not.toHaveProperty('image_url');
+  });
+
+  it('supprime des recettes en une requête (cascade SQL pour favoris et planning)', async () => {
+    const { client, calls } = fakeClient({});
+    const repo = new SupabaseRepository(client);
+    await repo.deleteRecipes(user, []);
+    expect(calls).toHaveLength(0);
+    await repo.deleteRecipes(user, ['r1', 'r2']);
+    expect(calls.map((c) => [c.table, c.ops])).toEqual([
+      [
+        'recipes',
+        [
+          ['delete', []],
+          ['in', ['id', ['r1', 'r2']]],
+        ],
+      ],
+    ]);
+  });
+
+  it('supprimer : propage l’erreur', async () => {
+    const { client } = fakeClient({ recipes: [{ data: null, error: { message: 'permission denied' } }] });
+    await expect(new SupabaseRepository(client).deleteRecipes(user, ['r1'])).rejects.toThrow('permission denied');
   });
 
   it('photo : enregistre l’URL trouvée', async () => {

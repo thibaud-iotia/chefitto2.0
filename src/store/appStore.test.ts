@@ -164,6 +164,63 @@ describe('appStore — mutations', () => {
     expect(await store.getState().addRecipe(SEED_RECIPES[0]!)).toBeNull();
   });
 
+  it('modifie une recette (optimiste) et persiste', async () => {
+    const { store, repo } = await readyStore();
+    const r = store.getState().recipes[1]!;
+    expect(await store.getState().updateRecipe(r.id, { ...r, name: 'Salade revisitée' })).toBe(true);
+    expect(store.getState().recipes[1]).toEqual({ ...r, name: 'Salade revisitée' });
+    expect((await repo.loadAll(store.getState().user!)).recipes[1]!.name).toBe('Salade revisitée');
+  });
+
+  it('modification refusée : rollback, message, false', async () => {
+    const { store, repo } = await readyStore();
+    vi.spyOn(repo, 'updateRecipe').mockRejectedValueOnce(new RepositoryError('Recette introuvable'));
+    const r = store.getState().recipes[0]!;
+    expect(await store.getState().updateRecipe(r.id, { ...r, name: 'Autre' })).toBe(false);
+    expect(store.getState().recipes[0]).toEqual(r);
+    expect(store.getState().toast?.text).toBe('Recette introuvable');
+  });
+
+  it('supprime des recettes, avec leurs favoris et créneaux du planning', async () => {
+    const { store, repo } = await readyStore();
+    const [a, b, c] = store.getState().recipes;
+    await store.getState().toggleFavorite(a!.id);
+    await store.getState().toggleFavorite(c!.id);
+    await store.getState().setPlanEntry(0, 0, a!.id);
+    await store.getState().setPlanEntry(1, 0, b!.id);
+    await store.getState().setPlanEntry(1, 1, c!.id);
+    expect(await store.getState().deleteRecipes([a!.id, b!.id])).toBe(true);
+    const st = store.getState();
+    expect(st.recipes).toHaveLength(SEED_RECIPES.length - 2);
+    expect(st.favorites).toEqual([c!.id]);
+    expect(st.plan).toEqual({ '1-1': c!.id });
+    const saved = await repo.loadAll(st.user!);
+    expect(saved.recipes).toHaveLength(SEED_RECIPES.length - 2);
+    expect(saved.plan).toEqual({ '1-1': c!.id });
+  });
+
+  it('suppression refusée : tout est restauré ; liste vide : rien à faire', async () => {
+    const { store, repo } = await readyStore();
+    const id = store.getState().recipes[0]!.id;
+    await store.getState().toggleFavorite(id);
+    await store.getState().setPlanEntry(3, 0, id);
+    const spy = vi.spyOn(repo, 'deleteRecipes').mockRejectedValueOnce(new Error('Connexion réseau impossible'));
+    expect(await store.getState().deleteRecipes([id])).toBe(false);
+    expect(store.getState().recipes[0]!.id).toBe(id);
+    expect(store.getState().favorites).toEqual([id]);
+    expect(store.getState().plan['3-0']).toBe(id);
+    expect(store.getState().toast?.text).toBe('Connexion réseau impossible');
+    expect(await store.getState().deleteRecipes([])).toBe(true);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('profil refusé : affiche l’erreur, pas « Profil mis à jour »', async () => {
+    const { store, repo } = await readyStore();
+    vi.spyOn(repo, 'updateProfile').mockRejectedValueOnce(new Error('Connexion réseau impossible'));
+    await store.getState().updateProfile({ name: 'X', email: 'toto@cuisine.fr', household: 3 });
+    expect(store.getState().toast?.text).toBe('Connexion réseau impossible');
+  });
+
   it('met à jour le profil et affiche un toast', async () => {
     const { store } = await readyStore();
     await store.getState().updateProfile({ name: ' Chef Toto ', email: 'toto@cuisine.fr', household: 3 });
@@ -179,6 +236,8 @@ describe('appStore — mutations', () => {
     await store.getState().toggleFavorite('x');
     expect(await store.getState().addFridgeItem('Kiwi', 'Fruit')).toBe(false);
     expect(await store.getState().addRecipe(SEED_RECIPES[0]!)).toBeNull();
+    expect(await store.getState().updateRecipe('x', SEED_RECIPES[0]!)).toBe(false);
+    expect(await store.getState().deleteRecipes(['x'])).toBe(false);
     expect(store.getState().favorites).toEqual([]);
   });
 

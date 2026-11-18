@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   sameFood,
   foodKey,
+  recipeToForm,
+  withoutRecipes,
   EMPTY_FORM,
   badgeTone,
   buildRecipeDraft,
@@ -229,5 +231,51 @@ describe('foodKey', () => {
     expect(foodKey('Choux  Fleurs')).toBe('chou fleur');
     expect(foodKey('Riz')).toBe('riz');
     expect(foodKey('')).toBe('');
+  });
+});
+
+describe('recipeToForm (modification)', () => {
+  const recipe = {
+    id: 'r1',
+    name: 'Tarte',
+    category: 'Desserts' as const,
+    price: '€€',
+    timeMin: 45,
+    level: 'Moyen' as const,
+    description: 'Fondante',
+    ingredients: ['200 g de farine', '3 pommes'],
+    steps: ['Pétrir', 'Cuire'],
+    servings: 6,
+    imageUrl: 'https://img.test/tarte.webp',
+  };
+
+  it('pré-remplit le formulaire et conserve temps, niveau, coût et photo', () => {
+    expect(recipeToForm(recipe)).toEqual({
+      name: 'Tarte',
+      category: 'Desserts',
+      ingredients: '200 g de farine\n3 pommes',
+      description: 'Fondante',
+      steps: ['Pétrir', 'Cuire'],
+      meta: { timeMin: 45, level: 'Moyen', price: '€€', source: null },
+      servings: 6,
+      imageUrl: 'https://img.test/tarte.webp',
+    });
+  });
+
+  it('aller-retour sans perte via buildRecipeDraft', () => {
+    const res = buildRecipeDraft(recipeToForm(recipe));
+    expect(res).toEqual({ ok: true, draft: { ...recipe, id: undefined } });
+  });
+
+  it('vide les valeurs de remplissage et garde une étape vide', () => {
+    const form = recipeToForm({ ...recipe, ingredients: ['—'], description: 'Ma recette.', steps: [], imageUrl: 'javascript:x' });
+    expect(form).toMatchObject({ ingredients: '', description: '', steps: [''], imageUrl: null });
+  });
+});
+
+describe('withoutRecipes', () => {
+  it('retire les recettes supprimées du planning et des favoris', () => {
+    const out = withoutRecipes({ '0-0': 'a', '0-1': 'b', '3-1': 'c' }, ['a', 'c', 'd'], new Set(['a', 'c']));
+    expect(out).toEqual({ plan: { '0-1': 'b' }, favorites: ['d'] });
   });
 });

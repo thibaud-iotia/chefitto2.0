@@ -66,6 +66,21 @@ export const Download = (p: P) => (
     <path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" />
   </Svg>
 );
+export const Check = (p: P) => (
+  <Svg size={16} strokeWidth={3} {...p}>
+    <path d="m5 12.5 4.5 4.5L19 7.5" />
+  </Svg>
+);
+export const Pencil = (p: P) => (
+  <Svg size={16} {...p}>
+    <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4zM13.5 6.5l4 4" />
+  </Svg>
+);
+export const Trash = (p: P) => (
+  <Svg size={16} {...p}>
+    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+  </Svg>
+);
 
 export const NavIcon = ({ d, ...p }: P & { d: string }) => (
   <Svg size={22} {...p}>

@@ -21,6 +21,10 @@ export interface Repository {
   loadAll(user: User): Promise<UserData>;
   updateProfile(user: User, profile: Profile): Promise<void>;
   addRecipe(user: User, draft: RecipeDraft): Promise<Recipe>;
+  /** Remplace le contenu d'une recette. Erreur si elle n'existe plus. */
+  updateRecipe(user: User, recipeId: string, draft: RecipeDraft): Promise<void>;
+  /** Supprime des recettes ; leurs favoris et créneaux du planning disparaissent avec elles. */
+  deleteRecipes(user: User, recipeIds: readonly string[]): Promise<void>;
   /** Mémorise la photo trouvée automatiquement (`null` : plus de photo valide). */
   setRecipeImage(user: User, recipeId: string, imageUrl: string | null): Promise<void>;
   setFavorite(user: User, recipeId: string, on: boolean): Promise<void>;
