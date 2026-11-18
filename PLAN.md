@@ -128,7 +128,7 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
       `npx supabase functions deploy fridge-scan --project-ref <ref> --use-api` (auto en CI si secrets Supabase présents).
 - [ ] Déployer la fonction d'import : `npx supabase functions deploy recipe-import --project-ref <ref> --use-api`
       (ou secrets `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_REF` pour le déploiement auto en CI).
-- [ ] Nombre de personnes : ré-exécuter `supabase/schema.sql` (ajoute `recipes.servings` et `profiles.household`),
+- [x] Nombre de personnes : ré-exécuter `supabase/schema.sql` (ajoute `recipes.servings` et `profiles.household`),
       puis redéployer `recipe-import` (champ `servingsCount`). Sans redéploiement, l'app relit « 4 personnes » elle-même.
 
 ## Journal
