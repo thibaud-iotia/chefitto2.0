@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { ImportedRecipe } from '../data/recipeImport';
 import { safeImageUrl } from '../domain/images';
 import { EMPTY_FORM, moveItem, removeStep, type RecipeForm } from '../domain/logic';
+import { clampServings, parseServings } from '../domain/servings';
 import type { ImportTemplate, RecipeCategory } from '../domain/types';
 
 /** Brouillon de recette, conservé quand on passe par l'écran « Importer ». */
@@ -35,6 +36,7 @@ export const useRecipeForm = create<FormState>((set) => ({
         ingredients: t.ingredients.join('\n'),
         steps: [...t.steps],
         meta: { timeMin: t.timeMin, level: 'Facile', price: '—', source: null },
+        servings: null, // modèle sans quantités : taille du foyer
         imageUrl: null,
       },
     })),
@@ -47,6 +49,8 @@ export const useRecipeForm = create<FormState>((set) => ({
         description: r.description,
         steps: r.steps.length ? [...r.steps] : [''],
         meta: { timeMin: r.timeMin, level: r.level, price: r.price, source: { name: r.sourceName, url: r.sourceUrl } },
+        // `servingsCount` absent : Edge Function déployée avant le nombre de personnes, on relit le texte.
+        servings: clampServings(r.servingsCount) ?? parseServings(r.servings),
         imageUrl: safeImageUrl(r.imageUrl),
       },
     }),

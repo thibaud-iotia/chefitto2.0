@@ -44,6 +44,25 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 | 30 | Réserve sous la barre de nav = pseudo-élément `.page::after` (112 px + safe-area), pas `padding-bottom` ; `fieldset` en `min-width: 0` | Sur iPhone, « Ajouter la recette » restait caché sous la barre : certains Safari iOS ignorent le padding de fin d'un conteneur flex scrollable. Un `fieldset` prend par défaut la largeur min-content de son contenu : le bloc « Étapes » débordait à droite sur 393 px (iPhone 16). Test e2e de non-régression. |
 | 31 | **Image des aliments du frigo = emoji Unicode** (≤ Emoji 14) choisi par mot-clé : `domain/foodIcons.ts` (`foodIcon(nom, catégorie)`), mots entiers via `foodKey` (accents, pluriel), mot-clé le plus long puis le premier ; sinon emoji de la catégorie. Composant `FoodIcon` décoratif (`aria-hidden`) dans les étiquettes du frigo et la revue du scan (suit les corrections en direct) | Zéro requête, zéro octet d'image, hors ligne, rendu natif iOS/Android ; une banque de photos (API tierce) coûterait réseau, quota et CSP pour un gain faible. « Pomme de terre » ≠ pomme, « Laitue » ≠ lait. |
 | 32 | **Barre d'actions de la fiche recette dans le flux** (dernier enfant flex du cadre, fond plein + bordure), plus en `position: absolute` par-dessus la page ; page en `.pageWithBar` (réserve basse 24 px) ; « Planifier » sur fond blanc | Sur iPhone 16, les ingrédients défilaient sous le dégradé semi-transparent et le bouton outline transparent (et Safari iOS peut peindre la couche scrollable au-dessus). La zone de défilement s'arrête désormais au bord de la barre : aucun chevauchement possible. Test e2e (393×852, scroll milieu/fin, `elementFromPoint`). |
+| 33 | **Nombre de personnes** = entier 1–50 par recette (`recipes.servings`, défaut 4) + **taille du foyer** par profil (`profiles.household`, défaut 2). Lecture du `recipeYield` dans `_shared/servings.ts` (sans dépendance, importé par l'Edge Function et l'app) : nombre seul ou suivi d'une unité de convives (personnes, parts, portions, couverts…), plage → borne basse ; « 1 gâteau », « 12 crêpes » → `null` (reste écrit dans la description) | Un rendement en pièces n'est pas une base de calcul par personne. Un seul parseur testé pour l'import et pour relire le texte renvoyé par une ancienne Edge Function (`servingsCount` absent). |
+| 34 | **Recalcul à l'affichage seulement** (`domain/servings.ts`, `scaleIngredient`) : seule la quantité de tête est modifiée (ou après « Libellé : ») ; entiers, décimales FR, `1/2`, `½`, `1 ½`, plages `2-3` / `2 à 3` ; arrondi cuisine (≥ 100 → à 5 près, ≥ 10 → entier, sinon fraction usuelle ¼ ⅓ ½ ⅔ ¾ ou décimale si l'original l'était) ; le frigo est comparé au texte d'origine | Texte libre importé : on ne réécrit jamais la recette (aller-retour sans perte). « 1 boîte de 400 g » → « 2 boîte de 400 g » (pas d'accord du nom : le français est trop irrégulier pour le deviner sans risque). |
+| 35 | Fiche : s'ouvre **pour le foyer**, stepper − / + (`Stepper` dans `src/ui`, `role=group`, valeur `aria-live`), note « Quantités recalculées · recette prévue pour N » + « Revenir à N » seulement si une quantité change | Les recettes de départ n'ont pas de quantités : pas de note inutile. |
+| 36 | Colonnes optionnelles (`image_url`, `servings`, `household`) : écriture réessayée **sans la colonne** si PostgREST la dit inconnue (message contenant « column ») ; lecture du profil en `select('*')` | Front déployable avant la migration SQL ; une violation de contrainte reste une vraie erreur (non masquée). |
+
+## Nombre de personnes (terminé le 2026-11-18)
+
+Choix validés : stepper − / + sur la fiche avec **recalcul des quantités affichées** (rien n'est
+réécrit en base), **taille du foyer** dans le Profil (valeur de départ du formulaire et de la fiche),
+pas de nombre de personnes par repas du planning (piste V2). Détails : ADR 33-36.
+
+- [x] `_shared/servings.ts` : bornes 1–50, `parseServings` (« 4 personnes », « 4-6 parts », 6, tableau…) partagé Deno / navigateur
+- [x] Import : `servingsCount` dans `ImportedRecipe` (Marmiton, 750g, tout JSON-LD) ; « Pour N personnes » retiré de la description
+- [x] Client tolérant à l'ancienne Edge Function (`servingsCount` absent → `parseServings(servings)`)
+- [x] Domaine : `Recipe.servings`, `Profile.household`, `scaleIngredient` (entiers, décimales, fractions, ½, plages, « Farine : 200 g »)
+- [x] SQL : `recipes.servings`, `profiles.household` (+ migration idempotente) ; front tolérant tant que la migration n'est pas passée
+- [x] Repos Supabase / local (anciennes données sans champ → valeurs par défaut)
+- [x] UI : composant `Stepper`, fiche (stepper + quantités recalculées), formulaire, Profil
+- [x] Tests unitaires + E2E, doc
 
 ## Tests
 
@@ -58,8 +77,8 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 
 Voir `supabase/schema.sql`. Toutes les tables ont `user_id` + RLS `auth.uid() = user_id`.
 
-- `profiles(id, name, email, seeded)`
-- `recipes(id, user_id, name, category, price, time_min, level, description, ingredients text[], steps text[], image_url, created_at)`
+- `profiles(id, name, email, seeded, household 1-50)`
+- `recipes(id, user_id, name, category, price, time_min, level, description, ingredients text[], steps text[], servings 1-50, image_url, created_at)`
 - `favorites(user_id, recipe_id)`
 - `fridge_items(id, user_id, name, category, created_at)`
 - `plan_entries(user_id, day 0-6, meal 0-1, recipe_id)` — PK (user_id, day, meal)
@@ -109,6 +128,8 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
       `npx supabase functions deploy fridge-scan --project-ref <ref> --use-api` (auto en CI si secrets Supabase présents).
 - [ ] Déployer la fonction d'import : `npx supabase functions deploy recipe-import --project-ref <ref> --use-api`
       (ou secrets `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_REF` pour le déploiement auto en CI).
+- [ ] Nombre de personnes : ré-exécuter `supabase/schema.sql` (ajoute `recipes.servings` et `profiles.household`),
+      puis redéployer `recipe-import` (champ `servingsCount`). Sans redéploiement, l'app relit « 4 personnes » elle-même.
 
 ## Journal
 
@@ -129,8 +150,15 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
 - 2026-11-17 : images des aliments sur l'écran Frigo (ADR 31) : emoji par aliment (~250 mots-clés, repli par catégorie),
   aussi dans la revue du scan photo. 234 tests unitaires, E2E frigo + axe verts (iPhone + Android). Aucun impact bundle notable.
 
+- 2026-11-18 : nombre de personnes (ADR 33-36). Import (Marmiton, 750g, tout JSON-LD) → `servingsCount` ;
+  fiche ouverte pour la taille du foyer (Profil), stepper − / + qui recalcule les quantités ; formulaire et profil réglables.
+  307 tests unitaires/intégration (96,5 % lignes), 42 E2E hors réseau verts (iPhone + Android, axe sur la fiche recalculée),
+  E2E live Marmiton verts. JS initial 107,9 KiB / 130.
+
 ## Pistes V2
 
+- Nombre de personnes par repas du planning (ex. mardi soir pour 6), utilisé à l'ouverture de la fiche depuis le planning.
+- Liste de courses : additionner les quantités recalculées des recettes planifiées.
 - Choisir / prendre sa propre photo pour une recette (upload Supabase Storage), en plus de la photo automatique.
 - Suppression / édition de recette, liste de courses générée depuis les « À acheter ».
 - Planning multi-semaines (actuellement une semaine type).

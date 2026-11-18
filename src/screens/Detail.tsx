@@ -1,30 +1,40 @@
+import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { RecipeImage } from '../components/RecipeImage';
 import { useBack } from '../components/hooks';
 import { ChevronLeft, Heart } from '../components/icons';
 import { formatTime, hasIngredient, haveCount } from '../domain/logic';
+import { MAX_SERVINGS, MIN_SERVINGS, scaleIngredient, servingsFactor, servingsLabel } from '../domain/servings';
 import { useApp } from '../store/storeContext';
-import { Badge, Button, IconButton, ProgressBar } from '../ui';
+import { Badge, Button, IconButton, ProgressBar, Stepper } from '../ui';
 import s from './screens.module.css';
 
 export default function Detail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const back = useBack();
-  const { recipe, fridge, fav, toggleFavorite, openSheet } = useApp(
+  const { recipe, fridge, household, fav, toggleFavorite, openSheet } = useApp(
     useShallow((st) => ({
       recipe: st.recipes.find((r) => r.id === id),
       fridge: st.fridge,
+      household: st.profile.household,
       fav: !!id && st.favorites.includes(id),
       toggleFavorite: st.toggleFavorite,
       openSheet: st.openSheet,
     })),
   );
+  // Nombre de personnes choisi sur cette fiche ; à défaut, la taille du foyer (Profil).
+  const [chosen, setChosen] = useState<number | null>(null);
   if (!recipe) return <Navigate to="/home" replace />;
 
   const have = haveCount(recipe, fridge);
   const pct = Math.round((have / Math.max(1, recipe.ingredients.length)) * 100);
+  const servings = chosen ?? household;
+  const factor = servingsFactor(recipe.servings, servings);
+  // Le recalcul n'affecte que l'affichage ; la correspondance avec le frigo utilise le texte d'origine.
+  const ingredients = recipe.ingredients.map((name) => ({ name, shown: scaleIngredient(name, factor) }));
+  const adjusted = ingredients.some((i) => i.shown !== i.name);
 
   return (
     <>
@@ -72,16 +82,37 @@ export default function Detail() {
                 {have}/{recipe.ingredients.length} au frigo
               </span>
             </div>
+            <div className={s.servingsRow}>
+              <span className={s.servingsLabel}>Pour</span>
+              <Stepper
+                label="Nombre de personnes"
+                value={servings}
+                min={MIN_SERVINGS}
+                max={MAX_SERVINGS}
+                onChange={setChosen}
+                format={servingsLabel}
+                decLabel="Une personne de moins"
+                incLabel="Une personne de plus"
+              />
+            </div>
+            {adjusted && (
+              <p className={s.servingsNote}>
+                Quantités recalculées · recette prévue pour {servingsLabel(recipe.servings)}{' '}
+                <button type="button" className={s.linkBtn} onClick={() => setChosen(recipe.servings)}>
+                  Revenir à {recipe.servings}
+                </button>
+              </p>
+            )}
             <ProgressBar value={pct} tone="accent" label="Ingrédients disponibles" />
             <ul className={s.ingList}>
-              {recipe.ingredients.map((name, i) => {
+              {ingredients.map(({ name, shown }, i) => {
                 const ok = hasIngredient(fridge, name);
                 return (
                   <li key={`${name}-${i}`} className={s.ingRow}>
                     <span className={s.ingMark} style={{ background: ok ? 'var(--green-400)' : 'var(--gray-200)' }} aria-hidden="true">
                       {ok ? '✓' : ''}
                     </span>
-                    <span className={s.ingName}>{name}</span>
+                    <span className={s.ingName}>{shown}</span>
                     <Badge tone={ok ? 'success' : 'neutral'}>{ok ? 'Au frigo' : 'À acheter'}</Badge>
                   </li>
                 );

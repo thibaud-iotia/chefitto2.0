@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { PHOTO_ORIGIN, expect, photoUrl, test } from './fixtures';
 
 test('parcours complet : recette → planning → mode cuisine', async ({ loggedIn: page }) => {
@@ -75,10 +76,11 @@ test('rechercher en ligne et importer une recette (API simulée)', async ({ logg
             timeMin: 75,
             level: 'Moyen',
             price: '€',
-            description: 'Pour 6 personnes. Source : marmiton.org.',
+            description: 'Source : marmiton.org.',
             ingredients: ['1,5 kg de pommes de terre', '50 cl de crème', '2 gousses d’ail'],
             steps: ['Éplucher les pommes de terre.', 'Napper de crème.', 'Cuire 1 h 15.'],
             servings: '6 personnes',
+            servingsCount: 6,
             imageUrl: null,
             sourceUrl: 'https://www.marmiton.org/recettes/recette_gratin-dauphinois_1.aspx',
             sourceName: 'marmiton.org',
@@ -104,13 +106,37 @@ test('rechercher en ligne et importer une recette (API simulée)', async ({ logg
   await expect(page.getByText('Recette importée')).toBeVisible();
   expect(calls).toHaveLength(2); // une recherche (anti-rebond) + un import
   await expect(page.getByLabel('Ingrédients')).toHaveValue('1,5 kg de pommes de terre\n50 cl de crème\n2 gousses d’ail');
+  await expect(page.getByRole('group', { name: 'Nombre de personnes' })).toContainText('6 personnes');
   await page.getByRole('button', { name: 'Ajouter la recette' }).click();
 
   await page.getByRole('tab', { name: 'Plats' }).click();
   await page.getByRole('link', { name: 'Gratin dauphinois' }).click();
-  await expect(page.getByText('1,5 kg de pommes de terre')).toBeVisible();
   await expect(page.locator('dt:text("Temps") + dd')).toHaveText('75 min');
   await expect(page.locator('dt:text("Niveau") + dd')).toHaveText('Moyen');
+
+  // La fiche s'ouvre pour le foyer (2 personnes par défaut) : quantités recalculées pour 2 au lieu de 6.
+  const stepper = page.getByRole('group', { name: 'Nombre de personnes' });
+  await expect(stepper).toContainText('2 personnes');
+  await expect(page.getByText('0,5 kg de pommes de terre')).toBeVisible();
+  await expect(page.getByText('17 cl de crème')).toBeVisible();
+  await expect(page.getByText(/recette prévue pour 6 personnes/)).toBeVisible();
+  const res = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+  expect(res.violations, JSON.stringify(res.violations.map((v) => [v.id, v.nodes.map((n) => n.target)]), null, 2)).toEqual([]);
+  await page.getByRole('button', { name: 'Revenir à 6' }).click();
+  await expect(stepper).toContainText('6 personnes');
+  await expect(page.getByText('1,5 kg de pommes de terre')).toBeVisible();
+
+  // Taille du foyer réglée dans le profil (persistée) : les fiches s'ouvrent désormais pour 3.
+  await page.goto('./#/profile');
+  await page.getByRole('button', { name: 'Une personne de plus dans le foyer' }).click();
+  await page.getByRole('button', { name: 'Mettre à jour' }).click();
+  await expect(page.getByText('Profil mis à jour')).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('group', { name: 'Taille du foyer' })).toContainText('3 personnes');
+  await page.goto('./#/home');
+  await page.getByRole('tab', { name: 'Plats' }).click();
+  await page.getByRole('link', { name: 'Gratin dauphinois' }).click();
+  await expect(page.getByText('0,75 kg de pommes de terre')).toBeVisible();
 });
 
 test('favoris et déconnexion / reconnexion', async ({ loggedIn: page }) => {

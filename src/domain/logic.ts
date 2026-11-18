@@ -9,6 +9,7 @@ import {
   type RecipeDraft,
 } from './types';
 import { safeImageUrl } from './images';
+import { clampServings, DEFAULT_SERVINGS } from './servings';
 
 /** Minuscule, sans accents ni ligatures, espaces normalisés. */
 export function normalize(s: string): string {
@@ -162,6 +163,8 @@ export interface RecipeForm {
   description: string;
   steps: string[];
   meta: ImportMeta | null;
+  /** Nombre de personnes ; `null` tant qu'il n'est ni importé ni réglé : on propose alors la taille du foyer. */
+  servings: number | null;
   /** Photo de la recette importée ; sinon une photo sera cherchée automatiquement après l'ajout. */
   imageUrl: string | null;
 }
@@ -173,6 +176,7 @@ export const EMPTY_FORM: RecipeForm = {
   description: '',
   steps: [''],
   meta: null,
+  servings: null,
   imageUrl: null,
 };
 
@@ -186,7 +190,8 @@ export function splitList(s: string): string[] {
 
 export type DraftResult = { ok: true; draft: RecipeDraft } | { ok: false; error: string };
 
-export function buildRecipeDraft(form: RecipeForm): DraftResult {
+/** `defaultServings` : taille du foyer, si le formulaire n'a pas de nombre de personnes. */
+export function buildRecipeDraft(form: RecipeForm, defaultServings: number = DEFAULT_SERVINGS): DraftResult {
   const name = form.name.trim();
   if (!name) return { ok: false, error: 'Donnez un nom au plat' };
   const ingredients = splitList(form.ingredients);
@@ -202,6 +207,7 @@ export function buildRecipeDraft(form: RecipeForm): DraftResult {
       description: form.description.trim() || 'Ma recette.',
       ingredients: ingredients.length ? ingredients : ['—'],
       steps: steps.length ? steps : ['Bon appétit !'],
+      servings: clampServings(form.servings) ?? clampServings(defaultServings) ?? DEFAULT_SERVINGS,
       imageUrl: safeImageUrl(form.imageUrl),
     },
   };

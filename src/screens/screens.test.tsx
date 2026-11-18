@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { weekdayIndex } from '../domain/logic';
+import { SEED_RECIPES } from '../domain/seed';
 import { renderApp } from '../test/renderApp';
 
 describe('Splash & Auth', () => {
@@ -151,6 +152,49 @@ describe('Détail, planification et cuisine', () => {
     expect(id).toBeTruthy();
   });
 
+  it('nombre de personnes : s’ouvre pour le foyer, recalcule les quantités, revient à la recette', async () => {
+    const { user, store } = await renderApp({ route: '/home' });
+    await act(() =>
+      store.getState().addRecipe({
+        ...SEED_RECIPES[0]!,
+        name: 'Crêpes',
+        ingredients: ['250 g de farine', '3 oeufs', '1/2 l de lait', 'Sel'],
+        servings: 4,
+      }),
+    );
+    await user.click(screen.getAllByRole('link', { name: 'Crêpes' })[0]!);
+    const stepper = screen.getByRole('group', { name: 'Nombre de personnes' });
+    const ingredients = () => within(screen.getByRole('region', { name: 'Ingrédients' })).getAllByRole('listitem').map((li) => li.textContent);
+
+    // Foyer par défaut : 2 personnes → quantités divisées par 2.
+    expect(within(stepper).getByText('2 personnes')).toHaveAttribute('aria-live', 'polite');
+    expect(ingredients()).toEqual([
+      expect.stringContaining('125 g de farine'),
+      expect.stringContaining('1 ½ oeufs'),
+      expect.stringContaining('¼ l de lait'),
+      expect.stringContaining('Sel'),
+    ]);
+    expect(screen.getByText(/Quantités recalculées · recette prévue pour 4 personnes/)).toBeInTheDocument();
+
+    await user.click(within(stepper).getByRole('button', { name: 'Une personne de plus' }));
+    await user.click(within(stepper).getByRole('button', { name: 'Une personne de plus' }));
+    expect(within(stepper).getByText('4 personnes')).toBeInTheDocument();
+    expect(ingredients()[0]).toContain('250 g de farine');
+    expect(screen.queryByText(/Quantités recalculées/)).not.toBeInTheDocument();
+
+    await user.click(within(stepper).getByRole('button', { name: 'Une personne de plus' }));
+    expect(ingredients().slice(0, 2)).toEqual([expect.stringContaining('315 g de farine'), expect.stringContaining('3 ¾ oeufs')]);
+    await user.click(screen.getByRole('button', { name: 'Revenir à 4' }));
+    expect(ingredients()[0]).toContain('250 g de farine');
+
+    const minus = within(stepper).getByRole('button', { name: 'Une personne de moins' });
+    for (let i = 0; i < 3; i++) await user.click(minus);
+    expect(within(stepper).getByText('1 personne')).toBeInTheDocument();
+    expect(minus).toBeDisabled();
+    // Le recalcul ne touche pas la recette enregistrée.
+    expect(store.getState().recipes[0]).toMatchObject({ servings: 4, ingredients: ['250 g de farine', '3 oeufs', '1/2 l de lait', 'Sel'] });
+  });
+
   it('recette inconnue → accueil', async () => {
     await renderApp({ route: '/recipe/nope' });
     expect(screen.getByText(/Que cuisine-t-on/)).toBeInTheDocument();
@@ -260,6 +304,17 @@ describe('Nouvelle recette & import', () => {
     expect(r).toMatchObject({ name: 'Pizza maison', category: 'Desserts', steps: ['Étaler', 'Cuire'], ingredients: ['Pâte', 'Tomate'] });
   });
 
+  it('nombre de personnes : la taille du foyer par défaut, réglable', async () => {
+    const { user, store } = await renderApp({ route: '/add' });
+    const stepper = screen.getByRole('group', { name: 'Nombre de personnes' });
+    expect(within(stepper).getByText('2 personnes')).toBeInTheDocument();
+    await user.click(within(stepper).getByRole('button', { name: 'Une personne de plus' }));
+    await user.type(screen.getByLabelText('Nom du plat'), 'Gratin');
+    await user.click(screen.getByRole('button', { name: 'Ajouter la recette' }));
+    await screen.findByText('Recette ajoutée');
+    expect(store.getState().recipes[0]).toMatchObject({ name: 'Gratin', servings: 3 });
+  });
+
   it('importe un modèle dans le formulaire', async () => {
     stubImportApi();
     const { user } = await renderApp({ route: '/add' });
@@ -297,10 +352,11 @@ const IMPORTED = {
   timeMin: 25,
   level: 'Moyen',
   price: '€',
-  description: 'Pour 4 personnes. Source : marmiton.org, par milou.g.',
+  description: 'Source : marmiton.org, par milou.g.',
   ingredients: ['4 verres de riz', '1,5 l de bouillon', 'chorizo'],
   steps: ['Faire bouillir le bouillon.', 'Ajouter le riz.'],
-  servings: '4 personnes',
+  servings: '6 personnes',
+  servingsCount: 6,
   imageUrl: null,
   sourceUrl: 'https://www.marmiton.org/recettes/recette_1.aspx',
   sourceName: 'marmiton.org',
@@ -360,6 +416,7 @@ describe('Import en ligne', () => {
     expect(screen.getByLabelText('Étape 2')).toHaveValue('Ajouter le riz.');
     expect(screen.getByRole('link', { name: 'marmiton.org' })).toHaveAttribute('href', IMPORTED.sourceUrl);
     expect(screen.getByText(/25 min · Moyen/)).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Nombre de personnes' })).getByText('6 personnes')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Ajouter la recette' }));
     expect(await screen.findByText('Recette ajoutée')).toBeInTheDocument();
@@ -370,12 +427,16 @@ describe('Import en ligne', () => {
       price: '€',
       ingredients: ['4 verres de riz', '1,5 l de bouillon', 'chorizo'],
       description: IMPORTED.description,
+      servings: 6,
     });
   });
 
   it('importe depuis un lien collé (touche Entrée) et permet d’oublier la source', async () => {
     const fetchMock = stubImportApi((p) => ({
-      body: { recipe: { ...IMPORTED, name: 'Pâte pour crêpes', category: 'Desserts', sourceName: '750g.com', sourceUrl: p.get('url') } },
+      // Edge Function déployée avant `servingsCount` : seul le texte « 4 personnes » est renvoyé.
+      body: {
+        recipe: { ...IMPORTED, servings: '4 personnes', servingsCount: undefined, name: 'Pâte pour crêpes', category: 'Desserts', sourceName: '750g.com', sourceUrl: p.get('url') },
+      },
     }));
     const { user, store } = await renderApp({ route: '/add/import' });
     await user.type(screen.getByRole('searchbox'), 'www.750g.com/pate-a-crepes-r17175.htm');
@@ -391,7 +452,7 @@ describe('Import en ligne', () => {
     expect(screen.queryByText(/Importée depuis/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Ajouter la recette' }));
     await screen.findByText('Recette ajoutée');
-    expect(store.getState().recipes[0]).toMatchObject({ name: 'Pâte pour crêpes', price: '—', level: 'Facile' });
+    expect(store.getState().recipes[0]).toMatchObject({ name: 'Pâte pour crêpes', price: '—', level: 'Facile', servings: 4 });
   });
 
   it('affiche les erreurs de recherche, réessaie, et signale un import impossible', async () => {
@@ -536,8 +597,11 @@ describe('Profil', () => {
     const name = screen.getByLabelText('Nom');
     await user.clear(name);
     await user.type(name, 'Toto Lacuisine');
+    const foyer = screen.getByRole('group', { name: 'Taille du foyer' });
+    expect(within(foyer).getByText('2 personnes')).toBeInTheDocument();
+    await user.click(within(foyer).getByRole('button', { name: 'Une personne de plus dans le foyer' }));
     await user.click(screen.getByRole('button', { name: 'Mettre à jour' }));
-    await waitFor(() => expect(store.getState().profile.name).toBe('Toto Lacuisine'));
+    await waitFor(() => expect(store.getState().profile).toMatchObject({ name: 'Toto Lacuisine', household: 3 }));
     expect(screen.getByText('Profil mis à jour')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Se déconnecter' }));
     expect(await screen.findByRole('button', { name: 'Commencer' })).toBeInTheDocument();

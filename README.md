@@ -49,8 +49,9 @@ ou trouvée automatiquement par nom sur Marmiton, via la fonction d'import).
 
 1. Crée un projet sur https://supabase.com (offre gratuite).
 2. **SQL Editor** : colle et exécute `supabase/schema.sql`. Le script est ré-exécutable : sur une base
-   existante, il ajoute la colonne `recipes.image_url` (photos des recettes). Sans cette colonne, l'app
-   fonctionne mais les photos ne sont pas mémorisées.
+   existante, il ajoute les colonnes `recipes.image_url` (photos des recettes), `recipes.servings`
+   (nombre de personnes) et `profiles.household` (taille du foyer). Sans elles, l'app fonctionne mais
+   ces informations ne sont pas mémorisées (recettes comptées pour 4, foyer de 2).
 3. **Authentication › URL Configuration** : *Site URL* = `https://<ton-user>.github.io/<repo>/`
    (et ajoute la même URL dans *Redirect URLs*).
 4. Optionnel : **Authentication › Providers › Email** : désactive « Confirm email » si tu veux

@@ -78,6 +78,8 @@ test.describe('import en ligne — données réelles', () => {
     await expect(page.getByRole('textbox', { name: 'Étape 3', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Plats' })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByLabel('Description')).toHaveValue(/Source : marmiton\.org/);
+    // « recipeYield » de la page (« 4 personnes ») repris comme nombre de personnes.
+    await expect(page.getByRole('group', { name: 'Nombre de personnes' })).toContainText(/^−?\d+ personnes?\+?$/);
 
     await page.getByRole('button', { name: 'Ajouter la recette' }).click();
     await page.getByRole('tab', { name: 'Plats' }).click();
@@ -129,6 +131,7 @@ test.describe('API /api/recipe-import — données réelles', () => {
     expect((recipe.ingredients as string[]).length).toBeGreaterThan(1);
     expect((recipe.steps as string[]).length).toBeGreaterThan(0);
     expect(recipe.timeMin).toBeGreaterThan(0);
+    expect(recipe.servingsCount === null || (typeof recipe.servingsCount === 'number' && recipe.servingsCount >= 1)).toBe(true);
   });
 
   test('refuse les liens vers le réseau local (SSRF)', async ({ request }) => {

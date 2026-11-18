@@ -1,5 +1,6 @@
 import { createStore } from 'zustand/vanilla';
 import { capitalize, planKey, sameFood } from '../domain/logic';
+import { clampServings, DEFAULT_HOUSEHOLD } from '../domain/servings';
 import type { FoodCategory, FridgeItem, Plan, Profile, Recipe, RecipeDraft, User } from '../domain/types';
 import type { Repository } from '../data/repository';
 import { defaultImporter, type RecipeImporter } from '../data/recipeImport';
@@ -59,7 +60,7 @@ export interface AppActions {
 export type AppStore = ReturnType<typeof createAppStore>;
 
 const EMPTY: Pick<AppState, 'profile' | 'recipes' | 'favorites' | 'fridge' | 'plan'> = {
-  profile: { name: '', email: '' },
+  profile: { name: '', email: '', household: DEFAULT_HOUSEHOLD },
   recipes: [],
   favorites: [],
   fridge: [],
@@ -302,9 +303,14 @@ export function createAppStore(
         await repo.setRecipeImage(user, recipeId, imageUrl).catch(() => undefined);
       },
 
-      updateProfile(profile) {
+      updateProfile(input) {
+        const profile = {
+          name: input.name.trim(),
+          email: input.email.trim(),
+          household: clampServings(input.household) ?? get().profile.household,
+        };
         return optimistic(
-          () => ({ profile: { name: profile.name.trim(), email: profile.email.trim() } }),
+          () => ({ profile }),
           (u) => repo.updateProfile(u, profile),
         ).then(() => get().flash('Profil mis à jour'));
       },

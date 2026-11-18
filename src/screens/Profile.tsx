@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { plannedCount } from '../domain/logic';
+import { MAX_SERVINGS, MIN_SERVINGS, servingsLabel } from '../domain/servings';
 import { useApp } from '../store/storeContext';
-import { Avatar, Button, Input } from '../ui';
+import { Avatar, Button, Input, Stepper } from '../ui';
 import s from './screens.module.css';
 
 export default function Profile() {
@@ -18,11 +19,12 @@ export default function Profile() {
   );
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
+  const [household, setHousehold] = useState(profile.household);
   const ids = new Set(recipes.map((r) => r.id));
 
   function save(e: FormEvent) {
     e.preventDefault();
-    void updateProfile({ name, email });
+    void updateProfile({ name, email, household });
   }
 
   const stat = (value: number, label: string) => (
@@ -61,6 +63,24 @@ export default function Profile() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className={s.servingsRow}>
+            <span className={s.stepsLabel} aria-hidden="true">
+              Foyer
+            </span>
+            <Stepper
+              label="Taille du foyer"
+              value={household}
+              min={MIN_SERVINGS}
+              max={MAX_SERVINGS}
+              onChange={setHousehold}
+              format={servingsLabel}
+              decLabel="Une personne de moins dans le foyer"
+              incLabel="Une personne de plus dans le foyer"
+            />
+          </div>
+          <p className={s.servingsNote}>Les recettes s’ouvrent avec les quantités pour ce nombre de personnes.</p>
+        </div>
         <Button type="submit" size="lg" block>
           Mettre à jour
         </Button>

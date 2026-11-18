@@ -42,6 +42,7 @@ const r = (id: string, ingredients: string[], extra: Partial<Recipe> = {}): Reci
   category: 'Plats',
   price: '—',
   timeMin: 10,
+  servings: 4,
   level: 'Facile',
   description: '',
   ingredients,
@@ -166,6 +167,17 @@ describe('buildRecipeDraft', () => {
     const meta = { timeMin: 25, level: 'Moyen' as const, price: '€', source: { name: 'marmiton.org', url: 'https://www.marmiton.org/x' } };
     const res = buildRecipeDraft({ ...EMPTY_FORM, name: 'Risotto', ingredients: '4 verres de riz\n1,5 l de bouillon', steps: ['a'], meta });
     expect(res.ok && res.draft).toMatchObject({ timeMin: 25, level: 'Moyen', price: '€', ingredients: ['4 verres de riz', '1,5 l de bouillon'] });
+  });
+  it('nombre de personnes : celui du formulaire, sinon la taille du foyer, sinon 4', () => {
+    const servings = (form: number | null, household?: number) => {
+      const res = buildRecipeDraft({ ...EMPTY_FORM, name: 'X', servings: form }, household);
+      return res.ok ? res.draft.servings : 'erreur';
+    };
+    expect(servings(6, 2)).toBe(6);
+    expect(servings(null, 2)).toBe(2);
+    expect(servings(null)).toBe(4);
+    expect(servings(0, 3)).toBe(3); // hors bornes : ignoré
+    expect(servings(null, 999)).toBe(4);
   });
   it('reprend la photo importée si elle est sûre', () => {
     const draft = (imageUrl: string | null) => {

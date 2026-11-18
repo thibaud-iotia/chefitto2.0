@@ -9,8 +9,13 @@ create table if not exists public.profiles (
   name text not null default '',
   email text not null default '',
   seeded boolean not null default false,
+  household smallint not null default 2 check (household between 1 and 50),
   created_at timestamptz not null default now()
 );
+
+-- Migration (bases créées avant le nombre de personnes) : taille du foyer, valeur de départ des recettes.
+alter table public.profiles
+  add column if not exists household smallint not null default 2 check (household between 1 and 50);
 
 -- Crée le profil automatiquement à l'inscription.
 create or replace function public.handle_new_user()
@@ -39,6 +44,7 @@ create table if not exists public.recipes (
   description text not null default '',
   ingredients text[] not null default '{}',
   steps text[] not null default '{}',
+  servings smallint not null default 4 check (servings between 1 and 50),
   image_url text check (image_url is null or (image_url ~ '^https://' and char_length(image_url) <= 2048)),
   created_at timestamptz not null default now()
 );
@@ -48,6 +54,10 @@ create index if not exists recipes_user_idx on public.recipes (user_id, created_
 alter table public.recipes
   add column if not exists image_url text
   check (image_url is null or (image_url ~ '^https://' and char_length(image_url) <= 2048));
+
+-- Migration (bases créées avant le nombre de personnes) : personnes pour lesquelles les quantités sont écrites.
+alter table public.recipes
+  add column if not exists servings smallint not null default 4 check (servings between 1 and 50);
 
 -- Favoris ---------------------------------------------------------------
 create table if not exists public.favorites (

@@ -3,9 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { DishImage } from '../components/DishImage';
 import { Download } from '../components/icons';
 import { buildRecipeDraft, formatTime } from '../domain/logic';
+import { MAX_SERVINGS, MIN_SERVINGS, servingsLabel } from '../domain/servings';
 import { RECIPE_CATEGORIES } from '../domain/types';
 import { useApp } from '../store/storeContext';
-import { Button, Chip, Input, TextArea } from '../ui';
+import { Button, Chip, Input, Stepper, TextArea } from '../ui';
 import { useRecipeForm } from './formStore';
 import s from './screens.module.css';
 
@@ -13,13 +14,14 @@ export default function AddRecipe() {
   const navigate = useNavigate();
   const addRecipe = useApp((st) => st.addRecipe);
   const flash = useApp((st) => st.flash);
+  const household = useApp((st) => st.profile.household);
   const f = useRecipeForm();
   const { form } = f;
   const [busy, setBusy] = useState(false);
 
   async function save(e: FormEvent) {
     e.preventDefault();
-    const res = buildRecipeDraft(form);
+    const res = buildRecipeDraft(form, household);
     if (!res.ok) return flash(res.error);
     setBusy(true);
     const recipe = await addRecipe(res.draft);
@@ -71,9 +73,24 @@ export default function AddRecipe() {
             </Chip>
           ))}
         </div>
+        <div className={s.servingsRow}>
+          <span className={s.stepsLabel} aria-hidden="true">
+            Personnes
+          </span>
+          <Stepper
+            label="Nombre de personnes"
+            value={form.servings ?? household}
+            min={MIN_SERVINGS}
+            max={MAX_SERVINGS}
+            onChange={(n) => f.set('servings', n)}
+            format={servingsLabel}
+            decLabel="Une personne de moins"
+            incLabel="Une personne de plus"
+          />
+        </div>
         <TextArea
           label="Ingrédients"
-          hint="Un par ligne, ou séparés par des virgules"
+          hint="Un par ligne, ou séparés par des virgules. Quantités pour le nombre de personnes ci-dessus."
           placeholder="Tomate, mozzarella, basilic"
           rows={Math.min(8, Math.max(2, form.ingredients.split('\n').length))}
           value={form.ingredients}

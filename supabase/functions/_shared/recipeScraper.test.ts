@@ -149,6 +149,7 @@ describe('JSON-LD Recipe', () => {
       level: 'Facile',
       price: '€',
       servings: '4 personnes',
+      servingsCount: 4,
       sourceName: 'marmiton.org',
       sourceUrl: MARMITON_URL,
     });
@@ -156,7 +157,8 @@ describe('JSON-LD Recipe', () => {
     expect(r.ingredients).toHaveLength(10);
     expect(r.steps).toHaveLength(7);
     expect(r.steps[0]).toMatch(/^Faire bouillir 1,5 litre/);
-    expect(r.description).toBe('Pour 4 personnes. Source : marmiton.org, par milou.g.');
+    // Le nombre de personnes a son propre champ : plus répété dans la description.
+    expect(r.description).toBe('Source : marmiton.org, par milou.g.');
     expect(r.imageUrl).toMatch(/^https:\/\/assets\.afcdn\.com\//);
   });
 
@@ -168,7 +170,8 @@ describe('JSON-LD Recipe', () => {
     expect(r.ingredients).toEqual(["2 c. à s. d'huile", '250 g de farine', '500 ml de lait', '3 oeufs']);
     expect(r.steps[0]).toContain("mélanger l'ensemble");
     // Auteur « Communauté 750g » : redondant avec la source, non répété.
-    expect(r.description).toBe('Une pâte à crêpe simple et rapide. Pour 4 personnes. Source : 750g.com.');
+    expect(r.servingsCount).toBe(4);
+    expect(r.description).toBe('Une pâte à crêpe simple et rapide. Source : 750g.com.');
     expect(r.imageUrl).toBe('https://static.750g.com/images/1200-675/0931d7d376c077d0b196a5e8bc435806/pate-pour-crepes.png');
   });
 
@@ -200,16 +203,28 @@ describe('JSON-LD Recipe', () => {
     expect(r.level).toBe('Moyen');
     expect(r.price).toBe('€€');
     expect(r.servings).toBe('6 personnes');
+    expect(r.servingsCount).toBe(6);
     expect(r.ingredients).toEqual(['3 pommes', '1 pâte brisée']);
     expect(r.steps).toEqual(['Étaler la pâte.', 'Couper les pommes', 'Enfourner.', 'Servir tiède.']);
     expect(r.description.length).toBeLessThan(300);
-    expect(r.description).toMatch(/… Pour 6 personnes\. Source : cuisine\.example\.com, par Julie\.$/);
+    expect(r.description).toMatch(/… Source : cuisine\.example\.com, par Julie\.$/);
     expect(r.imageUrl).toBe('https://img.example.com/tarte.jpg');
 
     const minimal = toImportedRecipe({ '@type': 'Recipe', name: 'Pain', recipeInstructions: 'Pétrir\nCuire' }, 'https://pain.example.org/x');
-    expect(minimal).toMatchObject({ timeMin: 20, level: 'Facile', price: '—', ingredients: ['—'], servings: null, imageUrl: null });
+    expect(minimal).toMatchObject({ timeMin: 20, level: 'Facile', price: '—', ingredients: ['—'], servings: null, servingsCount: null, imageUrl: null });
     expect(minimal.description).toBe('Source : pain.example.org.');
     expect(toImportedRecipe({ '@type': 'Recipe', name: 'Sel', recipeIngredient: ['sel'] }, 'https://a.example.org').steps).toEqual(['Bon appétit !']);
+  });
+
+  it('nombre de personnes : plage, tableau, rendement qui n’est pas un nombre de convives', () => {
+    const base = { '@type': 'Recipe', name: 'Crêpes', recipeIngredient: ['250 g de farine'] };
+    const at = (recipeYield: unknown) => toImportedRecipe({ ...base, recipeYield } as never, 'https://a.example.org/x');
+    expect(at('4-6 personnes')).toMatchObject({ servings: '4-6 personnes', servingsCount: 4 });
+    expect(at(['4', '4 personnes'])).toMatchObject({ servings: '4 personnes', servingsCount: 4 });
+    // « 12 crêpes » : pas une base de calcul par personne, mais l'information reste dans la description.
+    const crepes = at('12 crêpes');
+    expect(crepes).toMatchObject({ servings: '12 crêpes', servingsCount: null });
+    expect(crepes.description).toBe('Pour 12 crêpes. Source : a.example.org.');
   });
 
   it('refuse une recette sans nom ou vide', () => {

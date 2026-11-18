@@ -21,6 +21,8 @@ export interface Recipe {
   description: string;
   ingredients: string[];
   steps: string[];
+  /** Nombre de personnes pour lesquelles les quantités des ingrédients sont écrites (1–50). */
+  servings: number;
   /**
    * Photo du plat (https). Reprise de la page importée, ou trouvée automatiquement par nom.
    * Absente (`undefined` / `null`) tant qu'aucune photo n'a été trouvée : on affiche l'illustration.
@@ -42,6 +44,8 @@ export type Plan = Record<string, string>;
 export interface Profile {
   name: string;
   email: string;
+  /** Taille du foyer : nombre de personnes proposé par défaut (nouvelle recette, fiche recette). */
+  household: number;
 }
 
 export interface User {

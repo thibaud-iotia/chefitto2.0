@@ -166,8 +166,11 @@ describe('appStore — mutations', () => {
 
   it('met à jour le profil et affiche un toast', async () => {
     const { store } = await readyStore();
-    await store.getState().updateProfile({ name: ' Chef Toto ', email: 'toto@cuisine.fr' });
-    expect(store.getState().profile.name).toBe('Chef Toto');
+    await store.getState().updateProfile({ name: ' Chef Toto ', email: 'toto@cuisine.fr', household: 3 });
+    expect(store.getState().profile).toEqual({ name: 'Chef Toto', email: 'toto@cuisine.fr', household: 3 });
+    // Taille hors bornes : la valeur précédente est conservée.
+    await store.getState().updateProfile({ name: 'Chef Toto', email: 'toto@cuisine.fr', household: 0 });
+    expect(store.getState().profile.household).toBe(3);
     expect(store.getState().toast?.text).toBe('Profil mis à jour');
   });
 

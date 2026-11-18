@@ -69,6 +69,17 @@ describe('mapping', () => {
   });
 });
 
+describe('mapping — nombre de personnes', () => {
+  it('servings ↔ servings, 4 si colonne absente ou valeur hors bornes', () => {
+    expect(toRecipe(row).servings).toBe(4); // base sans la colonne
+    expect(toRecipe({ ...row, servings: 6 }).servings).toBe(6);
+    expect(toRecipe({ ...row, servings: 0 }).servings).toBe(4);
+    expect(toRecipe({ ...row, servings: null }).servings).toBe(4);
+    expect(toRecipeRow({ ...toRecipe(row), servings: 2 })).toMatchObject({ servings: 2 });
+    expect(toRecipeRow({ ...toRecipe(row), servings: 999 })).toMatchObject({ servings: 4 });
+  });
+});
+
 describe('friendlyAuthError', () => {
   it('traduit les messages connus', () => {
     expect(friendlyAuthError('Invalid login credentials')).toBe('Email ou mot de passe incorrect');
@@ -138,7 +149,7 @@ describe('SupabaseRepository — données', () => {
       plan_entries: [{ data: [{ day: 1, meal: 0, recipe_id: 'r1' }], error: null }],
     });
     const data = await new SupabaseRepository(client).loadAll(user);
-    expect(data.profile).toEqual({ name: 'Toto', email: 'toto@cuisine.fr' });
+    expect(data.profile).toEqual({ name: 'Toto', email: 'toto@cuisine.fr', household: 2 }); // colonne absente : défaut
     expect(data.recipes[0]!.id).toBe('r1');
     expect(data.favorites).toEqual(['r1']);
     expect(data.plan).toEqual({ '1-0': 'r1' });
@@ -189,7 +200,7 @@ describe('SupabaseRepository — données', () => {
     await repo.removeFridgeItem(user, 'f9');
     await repo.setPlanEntry(user, 0, 1, 'r1');
     await repo.setPlanEntry(user, 0, 1, null);
-    await repo.updateProfile(user, { name: 'T', email: 'e' });
+    await repo.updateProfile(user, { name: 'T', email: 'e', household: 3 });
     const ops = calls.map((c) => `${c.table}:${c.ops[0]![0]}`);
     expect(ops).toEqual([
       'recipes:insert',
@@ -234,6 +245,78 @@ describe('SupabaseRepository — données', () => {
     await expect(new SupabaseRepository(client).addRecipe(user, { ...toRecipe(row), imageUrl: 'https://img.test/a.webp' })).rejects.toThrow(
       'Connexion réseau impossible',
     );
+    expect(calls).toHaveLength(1);
+  });
+
+  it('profil : taille du foyer lue et enregistrée', async () => {
+    const { client, calls } = fakeClient({
+      profiles: [
+        { data: { name: 'Toto', email: 'toto@cuisine.fr', household: 3 }, error: null },
+        { data: [], error: null },
+      ],
+      recipes: [{ data: [{ ...row, servings: 6 }], error: null }],
+      fridge_items: [{ data: [], error: null }],
+      favorites: [{ data: [], error: null }],
+      plan_entries: [{ data: [], error: null }],
+    });
+    const repo = new SupabaseRepository(client);
+    const data = await repo.loadAll(user);
+    expect(data.profile).toEqual({ name: 'Toto', email: 'toto@cuisine.fr', household: 3 });
+    expect(data.recipes[0]!.servings).toBe(6);
+    expect(calls[0]!.ops[0]).toEqual(['select', ['*']]); // la colonne `household` peut ne pas exister encore
+    await repo.updateProfile(user, { name: 'T', email: 'e', household: 5 });
+    expect(calls.at(-1)!.ops[0]).toEqual(['update', [{ name: 'T', email: 'e', household: 5 }]]);
+  });
+
+  it('base pas encore migrée : recette sans nombre de personnes ni photo, profil sans foyer', async () => {
+    const col = (c: string) => ({ data: null, error: { message: `Could not find the '${c}' column of 'recipes' in the schema cache` } });
+    const { client, calls } = fakeClient({
+      recipes: [col('servings'), col('image_url'), { data: row, error: null }],
+      profiles: [col('household'), { data: null, error: null }],
+    });
+    const repo = new SupabaseRepository(client);
+    const r = await repo.addRecipe(user, { ...toRecipe(row), servings: 6, imageUrl: 'https://img.test/a.webp' });
+    expect(r.id).toBe('r1');
+    const inserted = calls.filter((c) => c.table === 'recipes').map((c) => c.ops[0]![1][0] as Record<string, unknown>);
+    expect(inserted).toHaveLength(3);
+    expect(inserted[0]).toMatchObject({ servings: 6, image_url: 'https://img.test/a.webp' });
+    expect(inserted[1]).not.toHaveProperty('servings');
+    expect(inserted[1]).toHaveProperty('image_url');
+    expect(inserted[2]).not.toHaveProperty('image_url');
+
+    await repo.updateProfile(user, { name: 'T', email: 'e', household: 5 });
+    const updates = calls.filter((c) => c.table === 'profiles').map((c) => c.ops[0]![1][0]);
+    expect(updates).toEqual([{ name: 'T', email: 'e', household: 5 }, { name: 'T', email: 'e' }]);
+  });
+
+  it('seed sur une base pas encore migrée : recettes insérées sans la colonne servings', async () => {
+    const { client, calls } = fakeClient({
+      profiles: [
+        { data: { name: 'Toto', email: 'toto@cuisine.fr' }, error: null },
+        { data: [{ id: 'u1' }], error: null },
+      ],
+      recipes: [
+        { data: null, error: { message: "Could not find the 'servings' column of 'recipes' in the schema cache" } },
+        { data: null, error: null },
+        { data: [], error: null },
+      ],
+      fridge_items: [{ data: [], error: null }],
+      favorites: [{ data: [], error: null }],
+      plan_entries: [{ data: [], error: null }],
+    });
+    await new SupabaseRepository(client).loadAll(user);
+    const inserts = calls.filter((c) => c.table === 'recipes' && c.ops[0]![0] === 'insert').map((c) => c.ops[0]![1][0] as object[]);
+    expect(inserts).toHaveLength(2);
+    expect(inserts[0]![0]).toHaveProperty('servings', 4);
+    expect(inserts[1]![0]).not.toHaveProperty('servings');
+    expect(inserts[1]).toHaveLength(SEED_RECIPES.length);
+  });
+
+  it('une violation de contrainte sur servings n’est pas prise pour une colonne absente', async () => {
+    const { client, calls } = fakeClient({
+      recipes: [{ data: null, error: { message: 'new row for relation "recipes" violates check constraint "recipes_servings_check"' } }],
+    });
+    await expect(new SupabaseRepository(client).addRecipe(user, toRecipe(row))).rejects.toThrow(/recipes_servings_check/);
     expect(calls).toHaveLength(1);
   });
 

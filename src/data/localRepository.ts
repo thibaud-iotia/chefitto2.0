@@ -1,5 +1,6 @@
 import { SEED_FRIDGE, SEED_RECIPES } from '../domain/seed';
 import { planKey } from '../domain/logic';
+import { clampServings, DEFAULT_HOUSEHOLD, DEFAULT_SERVINGS } from '../domain/servings';
 import type { FoodCategory, FridgeItem, Profile, Recipe, RecipeDraft, User, UserData } from '../domain/types';
 import { RepositoryError, type Repository } from './repository';
 
@@ -40,6 +41,15 @@ function userIdFor(email: string): string {
   return `local-${(h >>> 0).toString(36)}`;
 }
 
+/** Données enregistrées par une version précédente : champs ajoutés depuis complétés par leur valeur par défaut. */
+function upgrade(d: UserData): UserData {
+  return {
+    ...d,
+    profile: { ...d.profile, household: clampServings(d.profile?.household) ?? DEFAULT_HOUSEHOLD },
+    recipes: (d.recipes ?? []).map((r) => ({ ...r, servings: clampServings(r.servings) ?? DEFAULT_SERVINGS })),
+  };
+}
+
 export class LocalRepository implements Repository {
   readonly mode = 'local' as const;
   private listeners = new Set<(u: User | null) => void>();
@@ -56,9 +66,9 @@ export class LocalRepository implements Repository {
 
   private load(user: User): UserData {
     const existing = read<UserData>(dataKey(user.id));
-    if (existing) return existing;
+    if (existing) return upgrade(existing);
     const fresh: UserData = {
-      profile: { name: user.email.split('@')[0] ?? '', email: user.email },
+      profile: { name: user.email.split('@')[0] ?? '', email: user.email, household: DEFAULT_HOUSEHOLD },
       recipes: SEED_RECIPES.map((r) => ({ ...r, id: uid() })),
       favorites: [],
       fridge: SEED_FRIDGE.map((f) => ({ ...f, id: uid() })),

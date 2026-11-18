@@ -13,6 +13,8 @@
  *   publié par quasiment tous les sites de recettes pour le référencement Google.
  */
 
+import { parseServings } from './servings.ts';
+
 export type ImportCategory = 'Entrées' | 'Plats' | 'Desserts' | 'Boissons';
 export type ImportLevel = 'Facile' | 'Moyen' | 'Difficile';
 
@@ -43,7 +45,10 @@ export interface ImportedRecipe {
   description: string;
   ingredients: string[];
   steps: string[];
+  /** Rendement tel que publié par la page (« 4 personnes », « 1 gâteau »…). */
   servings: string | null;
+  /** Nombre de personnes, si le rendement en indique un (base du recalcul des quantités). */
+  servingsCount: number | null;
   imageUrl: string | null;
   sourceUrl: string;
   sourceName: string;
@@ -386,6 +391,7 @@ export function toImportedRecipe(ld: JsonObject, sourceUrl: string): ImportedRec
     ((parseIsoDuration(ld.prepTime) ?? 0) + (parseIsoDuration(ld.cookTime) ?? 0) || null);
   const yieldText = asText(ld.recipeYield);
   const servings = yieldText ? (/^\d+$/.test(yieldText) ? `${yieldText} personnes` : yieldText) : null;
+  const servingsCount = parseServings(ld.recipeYield);
   const author = asText(ld.author);
   const isMarmiton = host.endsWith('marmiton.org');
   // La description Marmiton est un texte SEO générique : on la remplace par une ligne utile.
@@ -393,7 +399,8 @@ export function toImportedRecipe(ld: JsonObject, sourceUrl: string): ImportedRec
   if (base.length > 220) base = `${base.slice(0, 217).replace(/\s+\S*$/, '')}…`;
   const description = [
     base && !/[.!?…]$/.test(base) ? `${base}.` : base,
-    servings ? `Pour ${servings}.` : '',
+    // Le nombre de personnes a son propre champ ; un rendement d'une autre nature (« 1 gâteau ») reste lisible ici.
+    servings && servingsCount === null ? `Pour ${servings}.` : '',
     `Source : ${host}${author && !fold(author).includes(fold(host).split('.')[0]!) ? `, par ${author}` : ''}.`,
   ]
     .filter(Boolean)
@@ -409,6 +416,7 @@ export function toImportedRecipe(ld: JsonObject, sourceUrl: string): ImportedRec
     ingredients: ingredients.length ? ingredients : ['—'],
     steps: steps.length ? steps : ['Bon appétit !'],
     servings,
+    servingsCount,
     imageUrl: firstUrl(ld.image),
     sourceUrl: url.toString(),
     sourceName: host,

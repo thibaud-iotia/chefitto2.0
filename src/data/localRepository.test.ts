@@ -70,6 +70,27 @@ describe('LocalRepository', () => {
     expect((await repo.loadAll(u)).recipes[0]!.imageUrl).toBeNull();
   });
 
+  it('complète les données d’avant le nombre de personnes (recettes : 4, foyer : 2)', async () => {
+    const repo = new LocalRepository();
+    const u = await repo.signIn('old@b.fr');
+    const data = await repo.loadAll(u);
+    const legacy = {
+      ...data,
+      profile: { name: data.profile.name, email: data.profile.email },
+      recipes: data.recipes.map((r) => {
+        const old: Partial<typeof r> = { ...r };
+        delete old.servings;
+        return old;
+      }),
+    };
+    localStorage.setItem(`chefitto:v1:data:${u.id}`, JSON.stringify(legacy));
+    const after = await repo.loadAll(u);
+    expect(after.profile.household).toBe(2);
+    expect(after.recipes.every((r) => r.servings === 4)).toBe(true);
+    await repo.updateProfile(u, { ...after.profile, household: 5 });
+    expect((await repo.loadAll(u)).profile.household).toBe(5);
+  });
+
   it('conserve la photo d’une recette ajoutée', async () => {
     const repo = new LocalRepository();
     const u = await repo.signIn('a@b.fr');
@@ -82,6 +103,7 @@ describe('LocalRepository', () => {
       description: '',
       ingredients: ['Pomme'],
       steps: ['Cuire'],
+      servings: 6,
       imageUrl: 'https://img.test/tarte.webp',
     });
     expect((await repo.loadAll(u)).recipes.find((x) => x.id === r.id)?.imageUrl).toBe('https://img.test/tarte.webp');

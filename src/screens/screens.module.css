@@ -544,6 +544,28 @@
   font-size: 13px;
   color: var(--green-600);
 }
+.servingsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.servingsLabel {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--gray-600);
+}
+.servingsNote {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--gray-600);
+}
+.servingsNote .linkBtn {
+  font-size: inherit;
+  padding: 0 2px;
+  text-decoration: underline;
+}
 .ingList {
   list-style: none;
   margin: 0;

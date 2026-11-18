@@ -236,3 +236,33 @@ export function Chip({ on, children, onClick }: { on: boolean; children: ReactNo
     </button>
   );
 }
+
+/* ---------- Stepper ---------- */
+export interface StepperProps {
+  /** Nom du groupe pour les lecteurs d'écran (ex. « Nombre de personnes »). */
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange(value: number): void;
+  /** Texte affiché à côté de la valeur (ex. « 4 personnes ») ; par défaut la valeur seule. */
+  format?: (value: number) => string;
+  decLabel: string;
+  incLabel: string;
+  className?: string;
+}
+export function Stepper({ label, value, min, max, onChange, format = String, decLabel, incLabel, className }: StepperProps) {
+  return (
+    <div role="group" aria-label={label} className={cx(s.stepper, className)}>
+      <button type="button" className={s.stepperBtn} aria-label={decLabel} disabled={value <= min} onClick={() => onChange(Math.max(min, value - 1))}>
+        −
+      </button>
+      <output className={s.stepperValue} aria-live="polite">
+        {format(value)}
+      </output>
+      <button type="button" className={s.stepperBtn} aria-label={incLabel} disabled={value >= max} onClick={() => onChange(Math.min(max, value + 1))}>
+        +
+      </button>
+    </div>
+  );
+}
