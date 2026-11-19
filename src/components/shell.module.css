@@ -18,6 +18,8 @@
   height: 100dvh;
   background: var(--gray-50);
   overflow: hidden;
+  /* clip : interdit aussi le défilement programmatique (focus, scrollIntoView) du cadre. */
+  overflow: clip;
   display: flex;
   flex-direction: column;
 }

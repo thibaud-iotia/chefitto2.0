@@ -84,6 +84,9 @@ contextuelle (Modifier si une seule recette, Supprimer avec confirmation). Déta
 - [x] Correctif iPhone : l'appui long sur la carte ouvrait l'aperçu de lien de Safari (`-webkit-touch-callout`
       ne l'empêche pas sur un `<a href>`). La carte n'a plus de `href` : élément `role="link"` focusable qui
       ouvre la fiche au clic et à Entrée (on perd « ouvrir dans un onglet », sans intérêt dans la PWA)
+- [x] Correctif : ouvrir la confirmation de suppression faisait remonter tout l'écran (barre de nav comprise),
+      qui ne redescendait pas à la fermeture. Le `focus()` de `BottomSheet`, posé pendant que la feuille est encore
+      hors écran, faisait défiler `.frame`. Correctif : `focus({ preventScroll: true })` + `.frame` en `overflow: clip`
 
 ## Tests
 

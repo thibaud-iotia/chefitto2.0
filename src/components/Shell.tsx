@@ -74,7 +74,9 @@ export function BottomSheet({ open, title, items, onClose }: { open: boolean; ti
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
-    ref.current?.focus();
+    // preventScroll : la feuille est encore hors écran (translateY) au moment du focus ;
+    // sans ça le navigateur fait défiler .frame pour la montrer et tout l'écran reste décalé.
+    ref.current?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
