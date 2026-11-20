@@ -89,11 +89,16 @@ jobs:
           VITE_DATA_MODE: local
       - run: npm run size
       - run: npm run perf
+      - run: npx playwright install --with-deps chromium
+      # Réactivité sur un gros compte (300 recettes), CPU ralenti ×4 : interactions < 200 ms (INP « bon »).
+      - run: npm run e2e:perf
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: lighthouse
-          path: .lighthouseci
+          path: |
+            .lighthouseci
+            test-results
           retention-days: 7
 
   deploy:

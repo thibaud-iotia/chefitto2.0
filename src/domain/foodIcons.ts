@@ -119,6 +119,20 @@ function words(name: string): string {
  * n'est pas une pomme), puis le premier dans le nom (« Filet de saumon » → saumon, « Lait de coco » → lait).
  */
 export function foodIcon(name: string, category: FoodCategory): string {
+  let emoji = recognized.get(name);
+  if (emoji === undefined) {
+    if (recognized.size >= RECOGNIZED_MAX) recognized.clear();
+    emoji = recognize(name);
+    recognized.set(name, emoji);
+  }
+  return emoji ?? CATEGORY_ICON[category];
+}
+
+/** Emoji reconnu par nom (`null` : aucun mot-clé), mémorisé : ~150 mots-clés parcourus par appel. */
+const recognized = new Map<string, string | null>();
+const RECOGNIZED_MAX = 2000;
+
+function recognize(name: string): string | null {
   const text = ` ${words(name)} `;
   let best: { len: number; at: number; emoji: string } | null = null;
   for (const { key, emoji } of ENTRIES) {
@@ -126,5 +140,5 @@ export function foodIcon(name: string, category: FoodCategory): string {
     if (at < 0) continue;
     if (!best || key.length > best.len || (key.length === best.len && at < best.at)) best = { len: key.length, at, emoji };
   }
-  return best?.emoji ?? CATEGORY_ICON[category];
+  return best?.emoji ?? null;
 }

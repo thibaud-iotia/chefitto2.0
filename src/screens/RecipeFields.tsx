@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react';
+import { memo, type FormEvent } from 'react';
 import { MAX_SERVINGS, MIN_SERVINGS, servingsLabel } from '../domain/servings';
 import { RECIPE_CATEGORIES } from '../domain/types';
 import { Button, Chip, Input, Stepper, TextArea } from '../ui';
@@ -67,35 +67,15 @@ export function RecipeFields({
           </span>
         </div>
         {form.steps.map((text, i) => (
-          <div key={i} className={`${s.card} ${s.stepRow}`}>
-            <span className={s.stepN} aria-hidden="true">
-              {i + 1}
-            </span>
-            <textarea
-              aria-label={`Étape ${i + 1}`}
-              rows={2}
-              value={text}
-              placeholder={i === 0 ? 'Ex. Couper les légumes en dés' : 'Étape suivante…'}
-              onChange={(e) => f.setStep(i, e.target.value)}
-            />
-            <div className={s.stepMoves}>
-              <button type="button" className={s.stepMove} aria-label={`Monter l'étape ${i + 1}`} disabled={i === 0} onClick={() => f.moveStep(i, -1)}>
-                ↑
-              </button>
-              <button
-                type="button"
-                className={s.stepMove}
-                aria-label={`Descendre l'étape ${i + 1}`}
-                disabled={i === form.steps.length - 1}
-                onClick={() => f.moveStep(i, 1)}
-              >
-                ↓
-              </button>
-            </div>
-            <button type="button" className={s.stepRemove} aria-label={`Supprimer l'étape ${i + 1}`} onClick={() => f.removeStep(i)}>
-              ×
-            </button>
-          </div>
+          <StepRow
+            key={i}
+            index={i}
+            text={text}
+            last={i === form.steps.length - 1}
+            setStep={f.setStep}
+            moveStep={f.moveStep}
+            removeStep={f.removeStep}
+          />
         ))}
         <Button variant="outline" block onClick={f.addStep}>
           Ajouter une étape
@@ -107,3 +87,46 @@ export function RecipeFields({
     </form>
   );
 }
+
+/**
+ * Une étape du formulaire. Mémoïsée : taper dans un champ ne redessine que sa ligne
+ * (les actions viennent du store du formulaire, donc stables).
+ */
+const StepRow = memo(function StepRow({
+  index: i,
+  text,
+  last,
+  setStep,
+  moveStep,
+  removeStep,
+}: {
+  index: number;
+  text: string;
+  last: boolean;
+} & Pick<FormState, 'setStep' | 'moveStep' | 'removeStep'>) {
+  return (
+    <div className={`${s.card} ${s.stepRow}`}>
+      <span className={s.stepN} aria-hidden="true">
+        {i + 1}
+      </span>
+      <textarea
+        aria-label={`Étape ${i + 1}`}
+        rows={2}
+        value={text}
+        placeholder={i === 0 ? 'Ex. Couper les légumes en dés' : 'Étape suivante…'}
+        onChange={(e) => setStep(i, e.target.value)}
+      />
+      <div className={s.stepMoves}>
+        <button type="button" className={s.stepMove} aria-label={`Monter l'étape ${i + 1}`} disabled={i === 0} onClick={() => moveStep(i, -1)}>
+          ↑
+        </button>
+        <button type="button" className={s.stepMove} aria-label={`Descendre l'étape ${i + 1}`} disabled={last} onClick={() => moveStep(i, 1)}>
+          ↓
+        </button>
+      </div>
+      <button type="button" className={s.stepRemove} aria-label={`Supprimer l'étape ${i + 1}`} onClick={() => removeStep(i)}>
+        ×
+      </button>
+    </div>
+  );
+});

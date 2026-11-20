@@ -15,7 +15,9 @@
     "e2e": "playwright test --project=iphone --project=android",
     "perf": "lhci autorun",
     "size": "node scripts/check-size.mjs",
-    "e2e:live": "playwright test --project=live"
+    "e2e:live": "playwright test --project=live",
+    "bench": "vitest bench --run --reporter=verbose",
+    "e2e:perf": "playwright test --project=perf --workers=1"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

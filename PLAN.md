@@ -59,6 +59,32 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 | 45 | **« Planifier » (fiche)** : même `WeekNav` dans la feuille (semaine stockée dans `sheet.week`), créneaux à partir d'aujourd'hui seulement, « déjà prévu » si la recette y est ; toast « Ajouté au planning · lundi 23 nov. midi » **seulement si l'écriture a réussi** (`setPlanEntry` renvoie un booléen). Accueil = repas de la semaine en cours, Profil = repas à venir | Avec 56 créneaux, une liste unique serait illisible ; planifier dans le passé n'a pas de sens depuis la fiche (reste possible depuis le planning). Le toast mentionne la date : on vérifie d'un coup d'œil la bonne semaine. |
 | 46 | **Feuille du bas fermée au doigt** : glisser vers le bas au-delà de 80 px, ou coup de doigt rapide (> 0,5 px/ms), la ferme ; sinon elle revient en place. Hook `useSwipeToClose` (`components/hooks.ts`), écouteurs tactiles natifs **non passifs** sur la feuille ; depuis la liste (`data-sheet-scroll`), le geste ne tire la feuille que si la liste est en haut, sinon elle défile ; `overscroll-behavior: contain`. Le clic est annulé au-delà de 10 px de glissement | Geste attendu sur iOS / Android : seul le fond permettait de fermer. Écouteurs React = passifs, `preventDefault` y est ignoré (rebond de la liste, clic sur le plat sous le doigt). |
 | 47 | **Vignette de la recette** (44 px, `RecipeImage`) dans le choix du plat d'un créneau, via `SheetItem.media` (décorative, `alt=""` : le nom reste le libellé accessible) | Reconnaissance visuelle plus rapide qu'un nom seul ; même photo que l'accueil, cherchée automatiquement si absente. |
+| 48 | **Score frigo indexé** : `WeakMap` frigo → noms normalisés + réponses par ingrédient (`hasIngredient`), textes d'ingrédients normalisés une fois (cache borné 5000), nom normalisé par objet recette (`WeakMap`), favoris en `Set` ; `foodIcon` mémorisé par nom (borné 2000). Les tableaux du store ne sont **jamais mutés** (nouveau tableau à chaque modification) | Le calcul naïf normalisait chaque aliment pour chaque ingrédient de chaque recette, à chaque rendu : 210 000 normalisations pour classer 1000 recettes, 61 ms pour l'accueil à 500 recettes. Désormais une normalisation par texte, 0 au re-rendu (0,19 ms). Une clé par identité de tableau suppose l'immutabilité, déjà garantie par Zustand. |
+| 49 | **Mémoïsation manuelle et ciblée** (pas de React Compiler) : `React.memo` sur `DishCard`, `RecipeImage`, `FridgeTag`, `StepRow`, `SheetHost`, `Toast`, `FridgeScan` ; callbacks stables qui reçoivent l'id (`onFav(id)`…) ; données dérivées en `useMemo` (scores par recette, `Set` d'ids, groupes du frigo, compteurs du profil) ; état local déplacé au plus près (`AddFoodForm`) ; `SheetHost` abonné aux recettes / frigo / planning **seulement feuille ouverte** ; `useDeferredValue` sur la recherche et l'onglet de l'accueil. Pas de mémo sur les petits composants du DS (Button, Badge…) | Choix validé : explicite, sans dépendance ni passage Babel. Mémoïser partout coûte (comparaisons, lisibilité) ; on cible les listes. Un objet passé en prop doit être stable (`PLATE_SHADOW`). Pas de découpage du bundle (choix validé) : Lighthouse à 100, gain ~8 Ko pour des états de chargement en plus. |
+| 50 | **Tests de perf en 4 niveaux** : (1) nombre de rendus (`src/perf/*Renders.test.tsx`, sondes `vi.mock` sur `RecipeImage` / `DishImage` / `FoodIcon`) ; (2) budget de calcul (`complexity.test.ts`, compte `String.prototype.normalize`) ; (3) benchmarks informatifs `npm run bench` (API `bench` de Vitest 5 = fixture de test, implémentation d'origine en référence) ; (4) e2e `npm run e2e:perf` (projet Playwright `perf`, 1 worker, CPU ×4, 300 recettes, Event Timing API = INP, seuil 200 ms) dans le job CI « Performance » | (1)(2) déterministes, bloquants en CI, insensibles à la machine. (3) sans seuil : trop variable. (4) mesure réelle, isolée pour ne pas être faussée par les tests parallèles. |
+
+## Performance (terminé le 2026-11-20)
+
+Choix validés : mémoïsation manuelle ciblée (pas de React Compiler), un seul bundle, 4 niveaux de tests de perf.
+Détails : ADR 48-50.
+
+- [x] Mesure de l'existant avant toute modification (tests de rendus / complexité écrits d'abord, en échec)
+- [x] Domaine : index du frigo, caches de normalisation, `Set` des favoris, `foodIcon` mémorisé
+- [x] Accueil : cartes mémoïsées, scores en `useMemo`, callbacks stables, recherche / onglet différés
+- [x] Fiche, planning, profil, suggestions : dérivés en `useMemo`, `RecipeImage` mémoïsé
+- [x] Frigo : formulaire isolé (`AddFoodForm`), étiquettes et scan photo mémoïsés ; formulaire de recette : étapes mémoïsées
+- [x] Feuille partagée et toast : ignorent la navigation, feuille fermée non abonnée aux données
+- [x] Tests : 25 tests de rendus / complexité, benchmarks, e2e de réactivité branché en CI
+
+| Mesure | Avant | Après |
+|---|---|---|
+| Normalisations pour classer 1000 recettes (100 aliments) | 210 480 | ≤ 300 (0 au re-rendu) |
+| Accueil, classement + scores, 500 recettes (bench) | 54-61 ms | 0,17 ms (0,40 ms frigo modifié) |
+| Recherche favoris, 1000 recettes (bench) | 1,05 ms | 0,04 ms |
+| Cartes redessinées par favori / repas planifié / frappe | toutes | 1 / 0 / 0 |
+| Interaction la plus lente, accueil, 300 recettes, CPU ×4 | 232 ms | 48 ms |
+| Interaction la plus lente, frigo (saisie + ajout), CPU ×4 | 280 ms | 48 ms |
+| JS initial (gzip) | 111,4 KiB | 112,0 KiB |
 
 ## Planning sur plusieurs semaines (terminé le 2026-11-20)
 
@@ -115,7 +141,8 @@ contextuelle (Modifier si une seule recette, Supprimer avec confirmation). Déta
 - **E2E** : Playwright, viewport iPhone (`npm run e2e`), en mode `local` (pas de réseau ; API d'import simulée par `page.route`).
 - **E2E live** (`npm run e2e:live`) : import sur vraies pages Marmiton / 750g via le middleware Vite (recherche, pagination, lien collé, page sans recette, axe, contrat API, SSRF). Job CI non bloquant.
 - **Performance** : Lighthouse CI (`npm run perf`) avec budgets (perf ≥ 0.9, a11y ≥ 0.9, LCP < 2.5 s, CLS < 0.1)
-  + budget de taille de bundle (`npm run size`).
+  + budget de taille de bundle (`npm run size`) + tests de rendus et de complexité (`src/perf`, dans `npm test`)
+  + benchmarks (`npm run bench`) + réactivité e2e (`npm run e2e:perf`, interactions < 200 ms à CPU ×4). Voir ADR 50.
 - **CI** GitHub Actions : lint → typecheck → unit → build → e2e → lighthouse → déploiement Pages.
 
 ## Modèle de données (Supabase)
@@ -217,6 +244,10 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
 - 2026-11-20 : planning — vignette de chaque recette dans le choix du plat, feuille du bas fermée en la glissant vers
   le bas (ADR 46-47). 360 tests unitaires/intégration, 48 E2E hors réseau verts (iPhone + Android, vrais événements
   tactiles via CDP). JS initial 111,4 KiB / 130.
+
+- 2026-11-20 : passe performance (ADR 48-50). Score frigo indexé, mémoïsation ciblée, rendus différés ; tests de rendus,
+  de complexité, benchmarks et e2e de réactivité (CPU ×4). 385 tests unitaires/intégration (95,8 % lignes), 48 E2E +
+  2 E2E perf verts, Lighthouse 100 / 100 / 100. JS initial 112,0 KiB / 130.
 
 ## Pistes V2
 

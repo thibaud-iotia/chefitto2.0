@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { toIsoDate } from '../domain/calendar';
 import { upcomingCount } from '../domain/logic';
@@ -21,7 +21,11 @@ export default function Profile() {
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
   const [household, setHousehold] = useState(profile.household);
-  const ids = new Set(recipes.map((r) => r.id));
+  // Compteurs recalculés seulement quand les données changent, pas à chaque frappe dans le formulaire.
+  const counts = useMemo(() => {
+    const ids = new Set(recipes.map((r) => r.id));
+    return { favorites: favorites.filter((f) => ids.has(f)).length, upcoming: upcomingCount(plan, toIsoDate(), ids) };
+  }, [recipes, favorites, plan]);
 
   function save(e: FormEvent) {
     e.preventDefault();
@@ -51,8 +55,8 @@ export default function Profile() {
       </div>
       <div className={s.profileStats}>
         {stat(recipes.length, 'recettes')}
-        {stat(favorites.filter((f) => ids.has(f)).length, 'favoris')}
-        {stat(upcomingCount(plan, toIsoDate(), ids), 'repas à venir')}
+        {stat(counts.favorites, 'favoris')}
+        {stat(counts.upcoming, 'repas à venir')}
       </div>
       <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <Input label="Nom" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />

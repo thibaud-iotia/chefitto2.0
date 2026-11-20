@@ -25,14 +25,51 @@ export function normalize(s: string): string {
     .trim();
 }
 
+type FridgeList = readonly Pick<FridgeItem, 'name'>[];
+
+/**
+ * Index d'un frigo : noms normalisés une seule fois, réponses mémorisées par ingrédient.
+ * Clé = le tableau lui-même (le store le remplace à chaque modification, jamais muté) : un nouveau frigo
+ * repart d'un index vide, l'ancien est libéré avec lui (WeakMap).
+ */
+interface FridgeIndex {
+  names: string[];
+  answers: Map<string, boolean>;
+}
+const fridgeIndexes = new WeakMap<FridgeList, FridgeIndex>();
+
+function fridgeIndex(fridge: FridgeList): FridgeIndex {
+  let ix = fridgeIndexes.get(fridge);
+  if (!ix) {
+    ix = { names: fridge.map((f) => normalize(f.name)).filter(Boolean), answers: new Map() };
+    fridgeIndexes.set(fridge, ix);
+  }
+  return ix;
+}
+
+/** Ingrédients normalisés une seule fois par texte (bornée : les textes viennent des recettes de l'utilisateur). */
+const normalizedText = new Map<string, string>();
+const NORMALIZED_MAX = 5000;
+function normalizeCached(s: string): string {
+  let n = normalizedText.get(s);
+  if (n === undefined) {
+    if (normalizedText.size >= NORMALIZED_MAX) normalizedText.clear();
+    n = normalize(s);
+    normalizedText.set(s, n);
+  }
+  return n;
+}
+
 /** Un ingrédient est « au frigo » si un aliment le contient ou y est contenu (ex. « Tomate » ↔ « Tomates cerises »). */
-export function hasIngredient(fridge: readonly Pick<FridgeItem, 'name'>[], ingredient: string): boolean {
-  const b = normalize(ingredient);
-  if (!b) return false;
-  return fridge.some((f) => {
-    const a = normalize(f.name);
-    return a.length > 0 && (a.includes(b) || b.includes(a));
-  });
+export function hasIngredient(fridge: FridgeList, ingredient: string): boolean {
+  const ix = fridgeIndex(fridge);
+  let ok = ix.answers.get(ingredient);
+  if (ok === undefined) {
+    const b = normalizeCached(ingredient);
+    ok = b.length > 0 && ix.names.some((a) => a.includes(b) || b.includes(a));
+    ix.answers.set(ingredient, ok);
+  }
+  return ok;
 }
 
 export function matchScore(recipe: Pick<Recipe, 'ingredients'>, fridge: readonly Pick<FridgeItem, 'name'>[]): number {
@@ -83,11 +120,22 @@ export function filterRecipes(
   opts: { category: CategoryFilter; query: string; favorites: readonly string[] },
 ): Recipe[] {
   const q = normalize(opts.query);
+  const favs = opts.category === 'fav' ? new Set(opts.favorites) : null;
   return recipes.filter((r) => {
-    const catOk =
-      opts.category === 'all' ? true : opts.category === 'fav' ? opts.favorites.includes(r.id) : r.category === opts.category;
-    return catOk && (!q || normalize(r.name).includes(q));
+    const catOk = opts.category === 'all' ? true : favs ? favs.has(r.id) : r.category === opts.category;
+    return catOk && (!q || normalizedName(r).includes(q));
   });
+}
+
+/** Nom normalisé d'une recette, calculé une fois par objet (une recette modifiée est un nouvel objet). */
+const recipeNames = new WeakMap<Pick<Recipe, 'name'>, string>();
+function normalizedName(r: Pick<Recipe, 'name'>): string {
+  let n = recipeNames.get(r);
+  if (n === undefined) {
+    n = normalize(r.name);
+    recipeNames.set(r, n);
+  }
+  return n;
 }
 
 export function groupFridge(items: readonly FridgeItem[]): { category: FoodCategory; items: FridgeItem[] }[] {

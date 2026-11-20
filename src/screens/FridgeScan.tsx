@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { memo, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { FoodIcon } from '../components/FoodIcon';
 import { Camera, Images } from '../components/icons';
@@ -26,8 +26,9 @@ const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : 
 /**
  * Remplit le frigo depuis des photos (frigo, placard, courses, ticket de caisse) :
  * photo → redimensionnement local → détection (Claude) → revue par l'utilisateur → ajout groupé.
+ * Mémoïsé (pas de props) : la page Frigo peut se redessiner sans lui.
  */
-export function FridgeScan() {
+export const FridgeScan = memo(function FridgeScan() {
   const { fridge, scanner, addFridgeItems, flash } = useApp(
     useShallow((st) => ({ fridge: st.fridge, scanner: st.scanner, addFridgeItems: st.addFridgeItems, flash: st.flash })),
   );
@@ -187,4 +188,4 @@ export function FridgeScan() {
       <input ref={libraryRef} type="file" accept="image/*" multiple hidden onChange={analyse} aria-label="Choisir des photos" />
     </section>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { RecipeImage } from '../components/RecipeImage';
@@ -40,34 +40,49 @@ export default function Home() {
   const [picked, setPicked] = useState<string[]>([]);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const selected = useMemo(() => picked.filter((id) => recipes.some((r) => r.id === id)), [picked, recipes]);
+  const ids = useMemo(() => new Set(recipes.map((r) => r.id)), [recipes]);
+  const selected = useMemo(() => picked.filter((id) => ids.has(id)), [picked, ids]);
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const favSet = useMemo(() => new Set(favorites), [favorites]);
   const selecting = selected.length > 0;
 
+  // Score frigo calculé une fois par recette et par version du frigo : les cartes reçoivent un nombre stable.
+  const pcts = useMemo(() => new Map(recipes.map((r) => [r.id, matchPct(r, fridge)])), [recipes, fridge]);
   const best = useMemo(() => rankBySuggestion(recipes, fridge)[0], [recipes, fridge]);
-  const shown = useMemo(() => filterRecipes(recipes, { category: cat, query, favorites }), [recipes, cat, query, favorites]);
+  // Saisie et onglets répondent tout de suite même avec beaucoup de recettes : la liste suit en priorité basse
+  // (rendu interruptible, la frappe suivante passe devant).
+  const deferredQuery = useDeferredValue(query);
+  const deferredCat = useDeferredValue(cat);
+  const shown = useMemo(
+    () => filterRecipes(recipes, { category: deferredCat, query: deferredQuery, favorites }),
+    [recipes, deferredCat, deferredQuery, favorites],
+  );
   // Semaine en cours : la carte ouvre le planning sur aujourd'hui.
-  const planned = plannedCount(plan, weekDates(weekStart(toIsoDate())), new Set(recipes.map((r) => r.id)));
+  const planned = plannedCount(plan, weekDates(weekStart(toIsoDate())), ids);
   const firstName = profile.name.split(' ')[0] || 'chef';
   const single = selected.length === 1 ? recipes.find((r) => r.id === selected[0]) : undefined;
-  const inPlan = Object.values(plan).some((id) => selected.includes(id));
+  const inPlan = confirming && Object.values(plan).some((id) => selectedSet.has(id));
 
-  const startSelection = (id: string) => {
+  // Callbacks stables (id en paramètre) : une carte mémoïsée ne se redessine que si ses données changent.
+  const openRecipe = useCallback((id: string) => navigate(`/recipe/${id}`), [navigate]);
+  const startSelection = useCallback((id: string) => {
     setPicked((p) => (p.includes(id) ? p : [...p, id]));
     setFocusId(id);
-  };
-  const toggleSelection = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  }, []);
+  const toggleSelection = useCallback((id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id])), []);
   const clearSelection = () => {
     setPicked([]);
     setConfirming(false);
   };
   // Changer de filtre vide la sélection : on ne supprime jamais une recette qu'on ne voit plus.
+  const unpick = () => setPicked((p) => (p.length ? [] : p));
   const changeCategory = (c: CategoryFilter) => {
     setCat(c);
-    setPicked([]);
+    unpick();
   };
   const changeQuery = (q: string) => {
     setQuery(q);
-    setPicked([]);
+    unpick();
   };
 
   // Échap quitte le mode sélection (si la confirmation est ouverte, Échap la ferme d'abord).
@@ -164,15 +179,15 @@ export default function Home() {
                 <DishCard
                   key={d.id}
                   recipe={d}
-                  pct={matchPct(d, fridge)}
-                  fav={favorites.includes(d.id)}
-                  onFav={() => toggleFavorite(d.id)}
-                  onOpen={() => navigate(`/recipe/${d.id}`)}
+                  pct={pcts.get(d.id) ?? 0}
+                  fav={favSet.has(d.id)}
+                  onFav={toggleFavorite}
+                  onOpen={openRecipe}
                   selecting={selecting}
-                  selected={selected.includes(d.id)}
+                  selected={selectedSet.has(d.id)}
                   autoFocus={focusId === d.id}
-                  onLongPress={() => startSelection(d.id)}
-                  onToggle={() => toggleSelection(d.id)}
+                  onLongPress={startSelection}
+                  onToggle={toggleSelection}
                 />
               ))}
             </ul>
@@ -224,29 +239,31 @@ export default function Home() {
   );
 }
 
+/** Les callbacks reçoivent l'id de la recette et doivent être stables (mémoïsation de la carte). */
 interface DishCardProps {
   recipe: Recipe;
   pct: number;
   fav: boolean;
-  onFav: () => void;
+  onFav: (id: string) => void;
   /** Ouvre la fiche de la recette. */
-  onOpen: () => void;
+  onOpen: (id: string) => void;
   /** Mode sélection : un appui coche / décoche la carte au lieu d'ouvrir la recette. */
   selecting: boolean;
   selected: boolean;
   /** Carte à l'origine de la sélection : garde le focus clavier quand le lien devient une case à cocher. */
   autoFocus: boolean;
-  onLongPress: () => void;
-  onToggle: () => void;
+  onLongPress: (id: string) => void;
+  onToggle: (id: string) => void;
 }
 
-function DishCard({ recipe, pct, fav, onFav, onOpen, selecting, selected, autoFocus, onLongPress, onToggle }: DishCardProps) {
-  const press = useLongPress(onLongPress);
+const DishCard = memo(function DishCard({ recipe, pct, fav, onFav, onOpen, selecting, selected, autoFocus, onLongPress, onToggle }: DishCardProps) {
+  const { id } = recipe;
+  const press = useLongPress(() => onLongPress(id));
   return (
     <li className={`${s.card} ${s.clickable} ${s.dishCard} ${selected ? s.dishCardSelected : ''}`} {...press}>
       <RecipeImage recipe={recipe} size={132} className={s.dishCardPlate} />
       {selecting ? (
-        <button type="button" className={s.dishCardLink} aria-pressed={selected} aria-label={recipe.name} autoFocus={autoFocus} onClick={onToggle} />
+        <button type="button" className={s.dishCardLink} aria-pressed={selected} aria-label={recipe.name} autoFocus={autoFocus} onClick={() => onToggle(id)} />
       ) : (
         // Pas de vrai <a href> : sur iPhone, l'appui long sur un lien ouvre l'aperçu de Safari
         // (-webkit-touch-callout n'y fait rien) au lieu de sélectionner la carte.
@@ -255,11 +272,11 @@ function DishCard({ recipe, pct, fav, onFav, onOpen, selecting, selected, autoFo
           tabIndex={0}
           className={s.dishCardLink}
           aria-label={recipe.name}
-          onClick={onOpen}
+          onClick={() => onOpen(id)}
           onKeyDown={(e) => {
             if (e.key !== 'Enter') return;
             e.preventDefault();
-            onOpen();
+            onOpen(id);
           }}
         />
       )}
@@ -271,7 +288,7 @@ function DishCard({ recipe, pct, fav, onFav, onOpen, selecting, selected, autoFo
         <button
           type="button"
           className={s.favBtn}
-          onClick={onFav}
+          onClick={() => onFav(id)}
           aria-pressed={fav}
           aria-label={fav ? `Retirer ${recipe.name} des favoris` : `Ajouter ${recipe.name} aux favoris`}
         >
@@ -285,4 +302,4 @@ function DishCard({ recipe, pct, fav, onFav, onOpen, selecting, selected, autoFo
       </div>
     </li>
   );
-}
+});

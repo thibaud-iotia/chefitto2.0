@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../store/storeContext';
 import { useSwipeToClose } from './hooks';
@@ -147,8 +147,8 @@ export function BottomSheet({
 
 export const TOAST_MS = 1800;
 
-/** Affiche le dernier message du store pendant TOAST_MS. Région live pour les lecteurs d'écran. */
-export function Toast() {
+/** Affiche le dernier message du store pendant TOAST_MS. Région live pour les lecteurs d'écran. Mémoïsé : ignore la navigation. */
+export const Toast = memo(function Toast() {
   const toast = useApp((st) => st.toast);
   const [hiddenId, setHiddenId] = useState<number | null>(null);
   useEffect(() => {
@@ -162,4 +162,4 @@ export function Toast() {
       {visible ? toast.text : ''}
     </div>
   );
-}
+});

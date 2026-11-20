@@ -67,7 +67,7 @@ export default defineConfig(({ mode }) => ({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}', 'supabase/functions/_shared/**/*.ts'],
-      exclude: ['src/**/*.test.{ts,tsx}', 'supabase/**/*.test.ts', 'src/test/**', 'src/main.tsx', 'src/vite-env.d.ts'],
+      exclude: ['src/**/*.test.{ts,tsx}', 'src/**/*.bench.ts', 'supabase/**/*.test.ts', 'src/test/**', 'src/main.tsx', 'src/vite-env.d.ts'],
       thresholds: { lines: 80, functions: 80, branches: 75, statements: 80 },
     },
   },

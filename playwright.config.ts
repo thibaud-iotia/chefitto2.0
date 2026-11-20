@@ -5,6 +5,8 @@ import { defineConfig, devices } from '@playwright/test';
  * - `iphone` / `android` : parcours complets, hors réseau (mode local, API d'import simulée) → `npm run e2e`.
  * - `live` : import sur de vraies pages (Marmiton, 750g) via le middleware Vite → `npm run e2e:live`.
  *   Séquentiel et sur un seul appareil pour rester sobre envers les sites sources.
+ * - `perf` : réactivité (durée des interactions, CPU ralenti) sur un gros compte → `npm run e2e:perf`.
+ *   Lancé seul avec un worker : des tests en parallèle fausseraient les mesures.
  */
 export default defineConfig({
   testDir: './e2e',
@@ -18,8 +20,9 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [
-    { name: 'iphone', testIgnore: /live\.spec\.ts/, use: { ...devices['iPhone 15'], browserName: 'chromium' } },
-    { name: 'android', testIgnore: /live\.spec\.ts/, use: { ...devices['Pixel 7'] } },
+    { name: 'iphone', testIgnore: /(live|perf)\.spec\.ts/, use: { ...devices['iPhone 15'], browserName: 'chromium' } },
+    { name: 'android', testIgnore: /(live|perf)\.spec\.ts/, use: { ...devices['Pixel 7'] } },
+    { name: 'perf', testMatch: /perf\.spec\.ts/, fullyParallel: false, use: { ...devices['Pixel 7'], trace: 'retain-on-failure' } },
     {
       name: 'live',
       testMatch: /live\.spec\.ts/,

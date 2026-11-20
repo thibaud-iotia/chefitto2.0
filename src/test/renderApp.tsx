@@ -6,7 +6,7 @@ import { LocalRepository } from '../data/localRepository';
 import { noImageFinder, type ImageFinder } from '../data/recipeImages';
 import type { FridgeScanner } from '../data/fridgeScan';
 import { useRecipeForm } from '../screens/formStore';
-import { createAppStore } from '../store/appStore';
+import { createAppStore, type AppState } from '../store/appStore';
 import { StoreProvider } from '../store/context';
 
 /** Scanner par défaut des tests : aucun appel réseau. */
@@ -21,12 +21,21 @@ export async function renderApp({
   signedIn = true,
   images = noImageFinder,
   scanner = noScanner,
-}: { route?: string; signedIn?: boolean; images?: ImageFinder; scanner?: FridgeScanner } = {}) {
+  data,
+}: {
+  route?: string;
+  signedIn?: boolean;
+  images?: ImageFinder;
+  scanner?: FridgeScanner;
+  /** Données remplaçant celles du compte de démo, appliquées avant le premier rendu. */
+  data?: Partial<Pick<AppState, 'recipes' | 'fridge' | 'favorites' | 'plan' | 'profile'>>;
+} = {}) {
   useRecipeForm.getState().reset();
   const repo = new LocalRepository();
   const store = createAppStore(repo, undefined, images, scanner);
   await store.getState().init();
   if (signedIn) await store.getState().signIn('toto@cuisine.fr', 'secret1');
+  if (data) store.setState(data);
   const user = userEvent.setup();
   const utils = render(
     <StoreProvider store={store}>

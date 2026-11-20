@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { RecipeImage } from '../components/RecipeImage';
 import { WeekNav } from '../components/WeekNav';
@@ -28,7 +28,8 @@ export default function Planning() {
   const week = weekStart(selected);
   const dates = weekDates(week);
   const offset = weekOffset(week, today);
-  const ids = new Set(recipes.map((r) => r.id));
+  const byId = useMemo(() => new Map(recipes.map((r) => [r.id, r])), [recipes]);
+  const ids = useMemo(() => new Set(byId.keys()), [byId]);
 
   // Changer de semaine garde le même jour de la semaine (mardi → mardi suivant).
   const goToWeek = (monday: IsoDate) => setSelected(addDays(monday, weekdayOf(selected)));
@@ -76,7 +77,8 @@ export default function Planning() {
         {formatDayLong(selected)}
       </h2>
       {MEALS.map((meal, i) => {
-        const dish = recipes.find((r) => r.id === plan[planKey(selected, i)]);
+        const id = plan[planKey(selected, i)];
+        const dish = id ? byId.get(id) : undefined;
         return (
           <div key={meal} className={`${s.card} ${s.slot}`} data-testid={`slot-${i}`}>
             {dish ? (

@@ -1,4 +1,4 @@
-import { useCallback, type ReactNode } from 'react';
+import { memo, useCallback, useMemo, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { RecipeImage } from './components/RecipeImage';
@@ -6,7 +6,8 @@ import { BottomNav, BottomSheet, Frame, Loader, Toast, type SheetItem } from './
 import { WeekNav } from './components/WeekNav';
 import { formatDayMedium, formatDayShort, lastPlannableWeek, toIsoDate, weekDates, weekStart, type IsoDate } from './domain/calendar';
 import { matchPct, planKey } from './domain/logic';
-import { MEALS } from './domain/types';
+import { MEALS, type FridgeItem, type Plan, type Recipe } from './domain/types';
+import type { AppActions, Sheet } from './store/appStore';
 import { useApp } from './store/storeContext';
 import { Button } from './ui';
 import AddRecipe from './screens/AddRecipe';
@@ -88,14 +89,22 @@ export default function App({ demo = false }: { demo?: boolean }) {
   );
 }
 
-/** Bottom sheet partagé : choix d'un plat pour un créneau, ou d'un créneau pour un plat. */
-function SheetHost() {
+const NO_RECIPES: Recipe[] = [];
+const NO_FRIDGE: FridgeItem[] = [];
+const NO_PLAN: Plan = {};
+
+/**
+ * Bottom sheet partagé : choix d'un plat pour un créneau, ou d'un créneau pour un plat.
+ * Mémoïsé (pas de props) : ne se redessine ni à chaque navigation, ni, feuille fermée, à chaque modification
+ * des recettes / du frigo / du planning (il n'y est abonné que feuille ouverte).
+ */
+const SheetHost = memo(function SheetHost() {
   const { sheet, recipes, fridge, plan, closeSheet, openSheet, setPlanEntry, flash } = useApp(
     useShallow((st) => ({
       sheet: st.sheet,
-      recipes: st.recipes,
-      fridge: st.fridge,
-      plan: st.plan,
+      recipes: st.sheet ? st.recipes : NO_RECIPES,
+      fridge: st.sheet?.type === 'pick' ? st.fridge : NO_FRIDGE,
+      plan: st.sheet ? st.plan : NO_PLAN,
       closeSheet: st.closeSheet,
       openSheet: st.openSheet,
       setPlanEntry: st.setPlanEntry,
@@ -103,23 +112,37 @@ function SheetHost() {
     })),
   );
   const onClose = useCallback(() => closeSheet(), [closeSheet]);
+  const { title, items, header } = useMemo(
+    () => sheetContent(sheet, recipes, fridge, plan, { openSheet, setPlanEntry, flash }),
+    [sheet, recipes, fridge, plan, openSheet, setPlanEntry, flash],
+  );
+  return <BottomSheet open={!!sheet} title={title} header={header} items={items} onClose={onClose} />;
+});
 
+function sheetContent(
+  sheet: Sheet,
+  recipes: Recipe[],
+  fridge: FridgeItem[],
+  plan: Plan,
+  { openSheet, setPlanEntry, flash }: Pick<AppActions, 'openSheet' | 'setPlanEntry' | 'flash'>,
+): { title: string; items: SheetItem[]; header: ReactNode } {
   let title = '';
-  let items: SheetItem[] = [];
+  const items: SheetItem[] = [];
   let header: ReactNode = null;
 
   if (sheet?.type === 'pick') {
     const { date, meal } = sheet;
     const sel = plan[planKey(date, meal)];
     title = `${formatDayMedium(date)} · ${MEALS[meal]}`;
-    items = recipes.map((d) => ({
-      key: d.id,
-      label: d.name,
-      sub: `${matchPct(d, fridge)}% frigo`,
-      media: <RecipeImage recipe={d} size={44} />,
-      selected: sel === d.id,
-      onPick: () => void setPlanEntry(date, meal, d.id),
-    }));
+    for (const d of recipes)
+      items.push({
+        key: d.id,
+        label: d.name,
+        sub: `${matchPct(d, fridge)}% frigo`,
+        media: <RecipeImage recipe={d} size={44} />,
+        selected: sel === d.id,
+        onPick: () => void setPlanEntry(date, meal, d.id),
+      });
     if (sel) items.push({ key: 'remove', label: 'Retirer ce repas', onPick: () => void setPlanEntry(date, meal, null) });
   }
 
@@ -151,5 +174,5 @@ function SheetHost() {
       });
   }
 
-  return <BottomSheet open={!!sheet} title={title} header={header} items={items} onClose={onClose} />;
+  return { title, items, header };
 }
