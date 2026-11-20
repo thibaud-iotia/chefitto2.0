@@ -57,6 +57,8 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 | 43 | **Dates = chaînes locales `AAAA-MM-JJ`**, calculs via `Date.UTC` (`domain/calendar.ts`), libellés français écrits à la main (pas d'`Intl`) | `toISOString()` décale d'un jour le soir en France ; l'arithmétique en ms sur l'heure locale casse aux changements d'heure. Libellés déterministes quel que soit l'ICU du navigateur / de Node. |
 | 44 | **Navigation semaine par semaine** (`WeekNav` : ‹ « Semaine du 23 au 29 nov. » ›, `aria-live`), puces « Lun 23 » ; **horizon = semaine en cours + 3** (`PLAN_WEEKS_AHEAD`) ; **historique sans limite** en arrière (jours passés atténués, toujours modifiables) ; « Aujourd'hui » hors de la semaine en cours ; changer de semaine garde le jour de la semaine. Flèches aux bornes en `aria-disabled` (pas `disabled`) | Choix validés. 4 semaines couvrent un mois de courses sans liste infinie. `disabled` ferait perdre le focus clavier au moment où l'on atteint la borne. |
 | 45 | **« Planifier » (fiche)** : même `WeekNav` dans la feuille (semaine stockée dans `sheet.week`), créneaux à partir d'aujourd'hui seulement, « déjà prévu » si la recette y est ; toast « Ajouté au planning · lundi 23 nov. midi » **seulement si l'écriture a réussi** (`setPlanEntry` renvoie un booléen). Accueil = repas de la semaine en cours, Profil = repas à venir | Avec 56 créneaux, une liste unique serait illisible ; planifier dans le passé n'a pas de sens depuis la fiche (reste possible depuis le planning). Le toast mentionne la date : on vérifie d'un coup d'œil la bonne semaine. |
+| 46 | **Feuille du bas fermée au doigt** : glisser vers le bas au-delà de 80 px, ou coup de doigt rapide (> 0,5 px/ms), la ferme ; sinon elle revient en place. Hook `useSwipeToClose` (`components/hooks.ts`), écouteurs tactiles natifs **non passifs** sur la feuille ; depuis la liste (`data-sheet-scroll`), le geste ne tire la feuille que si la liste est en haut, sinon elle défile ; `overscroll-behavior: contain`. Le clic est annulé au-delà de 10 px de glissement | Geste attendu sur iOS / Android : seul le fond permettait de fermer. Écouteurs React = passifs, `preventDefault` y est ignoré (rebond de la liste, clic sur le plat sous le doigt). |
+| 47 | **Vignette de la recette** (44 px, `RecipeImage`) dans le choix du plat d'un créneau, via `SheetItem.media` (décorative, `alt=""` : le nom reste le libellé accessible) | Reconnaissance visuelle plus rapide qu'un nom seul ; même photo que l'accueil, cherchée automatiquement si absente. |
 
 ## Planning sur plusieurs semaines (terminé le 2026-11-20)
 
@@ -211,6 +213,10 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
   planifiables, historique, « Planifier » par semaine depuis la fiche ; migration SQL idempotente + repli si non migrée.
   357 tests unitaires/intégration (96 % lignes), 46 E2E hors réseau verts (iPhone + Android, date figée, axe sur le
   planning et la feuille). JS initial 110,9 KiB / 130.
+
+- 2026-11-20 : planning — vignette de chaque recette dans le choix du plat, feuille du bas fermée en la glissant vers
+  le bas (ADR 46-47). 360 tests unitaires/intégration, 48 E2E hors réseau verts (iPhone + Android, vrais événements
+  tactiles via CDP). JS initial 111,4 KiB / 130.
 
 ## Pistes V2
 

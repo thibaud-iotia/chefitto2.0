@@ -1,6 +1,7 @@
 import { useCallback, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
+import { RecipeImage } from './components/RecipeImage';
 import { BottomNav, BottomSheet, Frame, Loader, Toast, type SheetItem } from './components/Shell';
 import { WeekNav } from './components/WeekNav';
 import { formatDayMedium, formatDayShort, lastPlannableWeek, toIsoDate, weekDates, weekStart, type IsoDate } from './domain/calendar';
@@ -115,6 +116,7 @@ function SheetHost() {
       key: d.id,
       label: d.name,
       sub: `${matchPct(d, fridge)}% frigo`,
+      media: <RecipeImage recipe={d} size={44} />,
       selected: sel === d.id,
       onPick: () => void setPlanEntry(date, meal, d.id),
     }));

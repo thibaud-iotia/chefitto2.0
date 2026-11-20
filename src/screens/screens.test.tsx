@@ -371,6 +371,47 @@ describe('Planning', () => {
     await user.click(screen.getByTestId('sheet-scrim'));
     expect(store.getState().sheet).toBeNull();
   });
+
+  it('le choix du plat montre la photo de chaque recette', async () => {
+    const { user } = await renderApp({ route: '/planning' });
+    await user.click(screen.getAllByRole('button', { name: /^Choisir/ })[0]!);
+    const sheet = screen.getByRole('dialog');
+    const item = within(sheet).getByRole('button', { name: /Mousse au chocolat/ });
+    expect(item.querySelector('img')).not.toBeNull();
+  });
+
+  /** Glisse le doigt verticalement de `from` à `to` (px) sur `el`. */
+  function swipe(el: Element, from: number, to: number) {
+    const at = (y: number) => [{ clientX: 100, clientY: y }];
+    fireEvent.touchStart(el, { touches: at(from) });
+    for (let y = from + 10; y <= to; y += 10) fireEvent.touchMove(el, { touches: at(y) });
+    fireEvent.touchEnd(el, { touches: [] });
+  }
+
+  it('glisser la sheet vers le bas la ferme ; un petit glissement ne fait rien', async () => {
+    const { user, store } = await renderApp({ route: '/planning' });
+    await user.click(screen.getAllByRole('button', { name: /^Choisir/ })[0]!);
+    const sheet = screen.getByRole('dialog');
+
+    // Quelques pixels (sous le seuil d'appui) : la feuille revient en place.
+    fireEvent.touchStart(sheet, { touches: [{ clientX: 100, clientY: 300 }] });
+    fireEvent.touchMove(sheet, { touches: [{ clientX: 100, clientY: 306 }] });
+    fireEvent.touchEnd(sheet, { touches: [] });
+    expect(store.getState().sheet).not.toBeNull();
+
+    // Depuis la liste (en haut de liste) : ferme.
+    swipe(within(sheet).getByRole('button', { name: /Mousse au chocolat/ }), 300, 450);
+    expect(store.getState().sheet).toBeNull();
+  });
+
+  it('liste déjà défilée : glisser vers le bas fait défiler, sans fermer', async () => {
+    const { user, store } = await renderApp({ route: '/planning' });
+    await user.click(screen.getAllByRole('button', { name: /^Choisir/ })[0]!);
+    const item = within(screen.getByRole('dialog')).getByRole('button', { name: /Mousse au chocolat/ });
+    item.closest<HTMLElement>('[data-sheet-scroll]')!.scrollTop = 120;
+    swipe(item, 300, 450);
+    expect(store.getState().sheet).not.toBeNull();
+  });
 });
 
 describe('Frigo & suggestions', () => {

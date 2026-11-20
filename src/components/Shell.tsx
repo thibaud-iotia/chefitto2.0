@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../store/storeContext';
+import { useSwipeToClose } from './hooks';
 import { NavIcon, Plus } from './icons';
 import s from './shell.module.css';
 
@@ -66,6 +67,8 @@ export interface SheetItem {
   label: string;
   sub?: string;
   subColor?: string;
+  /** Vignette à gauche du libellé (ex. photo de la recette). Décorative : le libellé reste le nom accessible. */
+  media?: ReactNode;
   selected?: boolean;
   onPick: () => void;
 }
@@ -85,6 +88,8 @@ export function BottomSheet({
   header?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const scrimRef = useRef<HTMLDivElement>(null);
+  useSwipeToClose(ref, scrimRef, open, onClose);
   useEffect(() => {
     if (!open) return;
     // preventScroll : la feuille est encore hors écran (translateY) au moment du focus ;
@@ -98,6 +103,7 @@ export function BottomSheet({
   return (
     <>
       <div
+        ref={scrimRef}
         className={s.scrim}
         style={{ opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none' }}
         onClick={onClose}
@@ -116,9 +122,15 @@ export function BottomSheet({
         <div className={s.grabber} />
         <h2 className={s.sheetTitle}>{title}</h2>
         {header}
-        <div className={s.sheetList}>
+        <div className={s.sheetList} data-sheet-scroll>
           {items.map((o) => (
-            <button key={o.key} type="button" className={`${s.sheetItem} ${o.selected ? s.sheetItemOn : ''}`} onClick={o.onPick}>
+            <button
+              key={o.key}
+              type="button"
+              className={`${s.sheetItem} ${o.media ? s.sheetItemMedia : ''} ${o.selected ? s.sheetItemOn : ''}`}
+              onClick={o.onPick}
+            >
+              {o.media}
               <span className={s.sheetItemLabel}>{o.label}</span>
               {o.sub && (
                 <span className={s.sheetItemSub} style={o.subColor ? { color: o.subColor } : undefined}>

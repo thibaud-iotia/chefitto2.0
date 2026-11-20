@@ -111,6 +111,7 @@
 }
 .grabber {
   align-self: center;
+  flex: none;
   width: 40px;
   height: 4px;
   border-radius: 2px;
@@ -126,6 +127,8 @@
 }
 .sheetList {
   overflow: auto;
+  /* Pas de rebond ni de défilement de la page derrière : en haut de liste, tirer vers le bas ferme la feuille. */
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -142,11 +145,16 @@
   align-items: center;
   gap: 10px;
 }
+.sheetItemMedia {
+  padding: 8px 14px 8px 8px;
+}
 .sheetItemOn {
   background: var(--brand-subtle);
   border-color: var(--red-300);
 }
 .sheetItemLabel {
+  flex: 1;
+  min-width: 0;
   font-weight: 700;
   font-size: 15px;
   color: var(--gray-900);

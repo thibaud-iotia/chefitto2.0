@@ -445,3 +445,28 @@ test('appui long sur une carte : sélectionner, modifier, supprimer (persistant)
   await expect(page.getByRole('link', { name: 'Veggie du jardin' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Veggie tomato mix' })).toHaveCount(0);
 });
+
+test('planning : vignettes dans le choix du plat ; glisser la feuille vers le bas la ferme', async ({ page }) => {
+  await setToday(page, '2026-11-16');
+  await login(page);
+  await page.getByRole('link', { name: 'Planning', exact: true }).click();
+  await page.getByRole('button', { name: /^Choisir le repas/ }).first().click();
+  const sheet = page.getByRole('dialog');
+  const item = sheet.getByRole('button', { name: /Veggie tomato mix/ });
+  await expect(item.locator('img')).toBeVisible();
+  await page.waitForTimeout(400); // fin de l'animation d'ouverture
+
+  // Vrais événements tactiles (CDP) : écouteurs non passifs, preventDefault, transitions.
+  const cdp = await page.context().newCDPSession(page);
+  const box = (await item.boundingBox())!;
+  const x = box.x + box.width / 2;
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', y?: number) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: y === undefined ? [] : [{ x, y }] });
+  await touch('touchStart', box.y + 10);
+  for (let dy = 20; dy <= 200; dy += 20) await touch('touchMove', box.y + 10 + dy);
+  await touch('touchEnd');
+
+  await expect(sheet).toBeHidden();
+  // Le glissement ne choisit pas le plat sous le doigt.
+  await expect(page.getByTestId('slot-0')).toContainText('Rien de prévu');
+});
