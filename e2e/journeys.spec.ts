@@ -175,6 +175,7 @@ test('photos : trouvées automatiquement, mémorisées, conservées à l’impor
   // Accueil : chaque carte affiche la photo trouvée pour son nom.
   const card = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Mousse au chocolat' }) });
   await expect(card.locator('[data-photo] img')).toHaveAttribute('src', photoUrl('Mousse au chocolat'));
+  await card.locator('[data-photo] img').scrollIntoViewIfNeeded(); // loading="lazy" : carte sous la ligne de flottaison
   await expect.poll(() => loaded(card.locator('[data-photo] img'))).toBeGreaterThan(0);
   await expect(page.getByRole('list', { name: 'Recettes' }).locator('[data-photo]')).toHaveCount(8);
 

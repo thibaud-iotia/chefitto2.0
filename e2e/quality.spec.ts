@@ -51,6 +51,7 @@ test.describe('PWA', () => {
     const img = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Mousse au chocolat' }) }).locator('[data-photo] img');
     const loaded = () => img.evaluate((i: HTMLImageElement) => (i.complete ? i.naturalWidth : 0));
     await expect(img).toHaveAttribute('src', photoUrl('Mousse au chocolat'));
+    await img.scrollIntoViewIfNeeded(); // loading="lazy" : carte sous la ligne de flottaison
     await expect.poll(loaded).toBeGreaterThan(0);
 
     // Plus de serveur de photos ni de réseau : seule la copie en cache peut s'afficher.
@@ -58,6 +59,7 @@ test.describe('PWA', () => {
     await context.setOffline(true);
     await page.reload();
     await expect(img).toHaveAttribute('src', photoUrl('Mousse au chocolat'));
+    await img.scrollIntoViewIfNeeded(); // loading="lazy" : carte sous la ligne de flottaison
     await expect.poll(loaded).toBeGreaterThan(0);
     await context.setOffline(false);
   });
