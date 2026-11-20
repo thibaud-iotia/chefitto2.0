@@ -224,7 +224,7 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
       (ou secrets `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_REF` pour le déploiement auto en CI).
 - [ ] Planning sur plusieurs semaines : ré-exécuter `supabase/schema.sql` (crée `planned_meals`, y déplace le planning
       actuel vers la semaine en cours). D'ici là l'app reste utilisable, mais seule la semaine en cours est modifiable.
-- [ ] Vidéos du mode cuisine : créer une clé YouTube Data API v3 (Google Cloud Console), puis
+- [x] Vidéos du mode cuisine : créer une clé YouTube Data API v3 (Google Cloud Console), puis
       `npx supabase secrets set YOUTUBE_API_KEY=... --project-ref <ref>`, ré-exécuter `supabase/schema.sql`
       (table `step_videos_cache`) et `npx supabase functions deploy step-videos --project-ref <ref> --use-api`
       (auto en CI si secrets Supabase présents). Sans clé, le mode cuisine s'affiche sans vidéo. Option payante :
