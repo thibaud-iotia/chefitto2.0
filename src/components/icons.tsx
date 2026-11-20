@@ -92,3 +92,10 @@ export const NavIcon = ({ d, ...p }: P & { d: string }) => (
     <path d={d} />
   </Svg>
 );
+
+/** Triangle « lecture », plein (bouton de lecture des vidéos). */
+export const Play = (p: P) => (
+  <Svg size={22} fill="currentColor" stroke="none" {...p}>
+    <path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" />
+  </Svg>
+);

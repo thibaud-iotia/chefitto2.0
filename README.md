@@ -82,6 +82,24 @@ ou trouvée automatiquement par nom sur Marmiton, via la fonction d'import).
    `FRIDGE_SCAN_PER_HOUR`). Les photos sont réduites à 1568 px et recompressées en JPEG sur le
    téléphone (métadonnées GPS supprimées) ; elles ne sont pas stockées. En dev : `ANTHROPIC_API_KEY`
    dans `.env.local`.
+8. **Fonction des vidéos du mode cuisine** (une vidéo YouTube sous chaque étape) — crée une clé
+   *YouTube Data API v3* (Google Cloud Console › API et services › activer « YouTube Data API v3 » ›
+   Identifiants › Clé API ; gratuite, quota de 10 000 unités/jour, soit ~100 recherches), puis :
+
+   ```bash
+   npx supabase secrets set YOUTUBE_API_KEY=AIza... --project-ref <ref-du-projet>
+   npx supabase functions deploy step-videos --project-ref <ref-du-projet> --use-api
+   ```
+
+   Par défaut, **sans IA ni coût** : la requête est tirée du texte de l'étape (mots porteurs + nom du plat,
+   « Coupez tomates émincez oignon Veggie tomato mix ») ; les étapes sans geste (« Servez frais ») ne sont
+   pas cherchées. Option payante : `npx supabase secrets set STEP_VIDEOS_CLAUDE=1` fait formuler les requêtes
+   par Claude (« nacrer le riz pour un risotto », plus précises), avec la même `ANTHROPIC_API_KEY` que
+   ci-dessus : un appel par recette non encore en cache. Les résultats sont gardés 30 jours dans la table `step_videos_cache` (ré-exécuter `schema.sql`),
+   partagée par tous les utilisateurs : une recette déjà ouverte ne consomme plus de quota. Réservée aux
+   utilisateurs connectés, 60 recettes/heure/utilisateur (secret optionnel `STEP_VIDEOS_PER_HOUR`).
+   Sans clé YouTube, le mode cuisine s'affiche simplement sans vidéo. En dev : `YOUTUBE_API_KEY` (et, en option,
+   `STEP_VIDEOS_CLAUDE=1`) dans `.env.local`.
 
 ### 3. GitHub
 
@@ -129,9 +147,12 @@ src/
 supabase/      schéma SQL + RLS
   functions/recipe-import/   Edge Function : proxy de recherche / import (CORS)
   functions/fridge-scan/     Edge Function : détection d'aliments sur photo (Claude vision)
+  functions/step-videos/     Edge Function : vidéo YouTube par étape (requêtes Claude + YouTube Data API + cache)
   functions/_shared/         recipeScraper.ts — parsing Marmiton + JSON-LD schema.org, garde-fou SSRF
                              fridgeScan.ts — prompt, sortie structurée, validation, limiteur
+                             stepVideos.ts — requêtes, recherche YouTube, cache, sans doublon ; stepVideoQueries.ts — requêtes par Claude (option)
 vite-plugin-recipe-import.ts sert /api/recipe-import en dev / preview avec le même code
 vite-plugin-fridge-scan.ts   sert /api/fridge-scan en dev / preview avec le même code
+vite-plugin-step-videos.ts   sert /api/step-videos en dev / preview avec le même code
 e2e/           tests Playwright
 ```

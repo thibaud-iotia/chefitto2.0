@@ -138,3 +138,15 @@ insert into public.planned_meals (user_id, meal_date, meal, recipe_id)
 select user_id, date_trunc('week', now() at time zone 'Europe/Paris')::date + day, meal, recipe_id
 from moved
 on conflict (user_id, meal_date, meal) do nothing;
+
+-- Vidéos du mode cuisine ------------------------------------------------
+-- Cache partagé des vidéos YouTube trouvées par étape (clé = SHA-256 de la recette + étape normalisées).
+-- Écrit et lu uniquement par l'Edge Function `step-videos` avec la clé service_role : RLS activée
+-- sans aucune politique, donc invisible pour les clés anon / authenticated. `video` null = « aucune vidéo ».
+create table if not exists public.step_videos_cache (
+  key text primary key check (key ~ '^[0-9a-f]{64}$'),
+  video jsonb,
+  created_at timestamptz not null default now()
+);
+alter table public.step_videos_cache enable row level security;
+revoke all on public.step_videos_cache from anon, authenticated;

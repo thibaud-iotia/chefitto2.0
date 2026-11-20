@@ -328,6 +328,77 @@ test('scanner le frigo en photo : image recompressée en JPEG, revue, ajout (API
   await expect(page.getByRole('region', { name: 'Autre' })).toContainText('Lait');
 });
 
+test.describe('mode cuisine', () => {
+  // Service worker bloqué : une requête qui passe par lui n'expose pas son corps à Playwright (`postDataJSON`).
+  test.use({ serviceWorkers: 'block' });
+
+  test('une vidéo par étape, lue au toucher, sans débordement sur iPhone, axe (API simulée)', async ({ loggedIn: page }) => {
+    await page.setViewportSize({ width: 393, height: 852 }); // iPhone 16
+    const ids = ['aaaaaaaaaaa', 'bbbbbbbbbbb', null, 'ddddddddddd'];
+    let sent: { recipe: string; steps: string[] } | null = null;
+    await page.route('**/api/step-videos', async (route) => {
+      sent = route.request().postDataJSON() as typeof sent;
+      await route.fulfill({
+        json: { videos: ids.map((id, i) => (id ? { id, title: `Geste de l’étape ${i + 1}`, channel: 'Chef Test' } : null)) },
+      });
+    });
+    // Miniatures et lecteur servis localement : aucun appel à YouTube.
+    const thumbs: string[] = [];
+    await page.context().route('https://i.ytimg.com/**', (route) => {
+      thumbs.push(new URL(route.request().url()).pathname);
+      return route.fulfill({ path: 'public/icons/icon-512.png', contentType: 'image/png' });
+    });
+    const embeds: string[] = [];
+    await page.context().route('https://www.youtube-nocookie.com/**', (route) => {
+      embeds.push(route.request().url());
+      return route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<!doctype html><title>Lecteur</title><p>Lecteur vidéo</p>' });
+    });
+
+    await page.getByRole('link', { name: 'Veggie tomato mix' }).click();
+    await page.getByRole('button', { name: 'Commencer à cuisiner' }).click();
+    const play = page.getByRole('button', { name: 'Lire la vidéo « Geste de l’étape 1 »' });
+    await expect(play).toBeVisible();
+    expect(sent).toEqual({
+      recipe: 'Veggie tomato mix',
+      steps: [
+        "Coupez les tomates en deux et émincez l'oignon.",
+        'Mélangez avec le basilic et les olives.',
+        "Assaisonnez d'huile d'olive, sel et poivre.",
+        'Servez frais.',
+      ],
+    });
+    await expect(play.locator('img')).toHaveJSProperty('complete', true);
+    expect(thumbs).toContain('/vi/aaaaaaaaaaa/hqdefault.jpg');
+    // Miniature de l'étape suivante préchargée.
+    await expect.poll(() => thumbs).toContain('/vi/bbbbbbbbbbb/hqdefault.jpg');
+    expect(embeds).toEqual([]); // aucun lecteur tant qu'on ne touche pas la vidéo
+
+    // Tout tient dans l'écran : boutons visibles, aucun débordement horizontal, vidéo en 16:9.
+    const box = (await play.boundingBox())!;
+    expect(Math.abs(box.width / box.height - 16 / 9)).toBeLessThan(0.02);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(393);
+    expect(await page.locator('main').evaluate((el) => el.scrollWidth - el.clientWidth)).toBe(0);
+    await expect(page.getByRole('button', { name: 'Étape suivante' })).toBeInViewport();
+    const res = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+    expect(res.violations, JSON.stringify(res.violations.map((v) => [v.id, v.nodes.map((n) => n.target)]), null, 2)).toEqual([]);
+
+    await play.click();
+    const player = page.frameLocator('iframe[title="Vidéo : Geste de l’étape 1"]');
+    await expect(player.getByText('Lecteur vidéo')).toBeVisible();
+    expect(embeds[0]).toBe('https://www.youtube-nocookie.com/embed/aaaaaaaaaaa?autoplay=1&playsinline=1&rel=0');
+
+    await page.getByRole('button', { name: 'Étape suivante' }).click();
+    await expect(page.locator('iframe')).toHaveCount(0); // changer d'étape arrête la vidéo
+    await expect(page.getByRole('button', { name: 'Lire la vidéo « Geste de l’étape 2 »' })).toBeVisible();
+    await page.getByRole('button', { name: 'Étape suivante' }).click();
+    await expect(page.getByText("Assaisonnez d'huile d'olive, sel et poivre.")).toBeVisible();
+    await expect(page.getByRole('button', { name: /Lire la vidéo/ })).toHaveCount(0); // étape sans vidéo
+    await page.getByRole('button', { name: 'Étape suivante' }).click();
+    await expect(page.getByRole('button', { name: 'Lire la vidéo « Geste de l’étape 4 »' })).toBeVisible();
+  });
+});
+
 test('« Ajouter la recette » n’est jamais masqué par la barre de navigation', async ({ loggedIn: page }) => {
   await page.setViewportSize({ width: 393, height: 852 }); // iPhone 16
   await page.getByRole('button', { name: 'Ajouter une recette' }).click();

@@ -739,6 +739,15 @@
   font-size: 13px;
   color: var(--text-mid);
 }
+.cookBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
 .cookStepNum {
   font-size: 12px;
   font-weight: 700;
@@ -753,9 +762,11 @@
   letter-spacing: -0.03em;
   line-height: 1.15;
   color: #fff;
-  flex: 1;
   margin: 0;
-  overflow: auto;
+}
+.cookTextLong {
+  font-size: 26px;
+  line-height: 1.25;
 }
 .cookRecipe {
   font-size: 14px;

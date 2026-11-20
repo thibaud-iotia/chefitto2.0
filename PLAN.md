@@ -62,6 +62,25 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 | 48 | **Score frigo indexé** : `WeakMap` frigo → noms normalisés + réponses par ingrédient (`hasIngredient`), textes d'ingrédients normalisés une fois (cache borné 5000), nom normalisé par objet recette (`WeakMap`), favoris en `Set` ; `foodIcon` mémorisé par nom (borné 2000). Les tableaux du store ne sont **jamais mutés** (nouveau tableau à chaque modification) | Le calcul naïf normalisait chaque aliment pour chaque ingrédient de chaque recette, à chaque rendu : 210 000 normalisations pour classer 1000 recettes, 61 ms pour l'accueil à 500 recettes. Désormais une normalisation par texte, 0 au re-rendu (0,19 ms). Une clé par identité de tableau suppose l'immutabilité, déjà garantie par Zustand. |
 | 49 | **Mémoïsation manuelle et ciblée** (pas de React Compiler) : `React.memo` sur `DishCard`, `RecipeImage`, `FridgeTag`, `StepRow`, `SheetHost`, `Toast`, `FridgeScan` ; callbacks stables qui reçoivent l'id (`onFav(id)`…) ; données dérivées en `useMemo` (scores par recette, `Set` d'ids, groupes du frigo, compteurs du profil) ; état local déplacé au plus près (`AddFoodForm`) ; `SheetHost` abonné aux recettes / frigo / planning **seulement feuille ouverte** ; `useDeferredValue` sur la recherche et l'onglet de l'accueil. Pas de mémo sur les petits composants du DS (Button, Badge…) | Choix validé : explicite, sans dépendance ni passage Babel. Mémoïser partout coûte (comparaisons, lisibilité) ; on cible les listes. Un objet passé en prop doit être stable (`PLATE_SHADOW`). Pas de découpage du bundle (choix validé) : Lighthouse à 100, gain ~8 Ko pour des états de chargement en plus. |
 | 50 | **Tests de perf en 4 niveaux** : (1) nombre de rendus (`src/perf/*Renders.test.tsx`, sondes `vi.mock` sur `RecipeImage` / `DishImage` / `FoodIcon`) ; (2) budget de calcul (`complexity.test.ts`, compte `String.prototype.normalize`) ; (3) benchmarks informatifs `npm run bench` (API `bench` de Vitest 5 = fixture de test, implémentation d'origine en référence) ; (4) e2e `npm run e2e:perf` (projet Playwright `perf`, 1 worker, CPU ×4, 300 recettes, Event Timing API = INP, seuil 200 ms) dans le job CI « Performance » | (1)(2) déterministes, bloquants en CI, insensibles à la machine. (3) sans seuil : trop variable. (4) mesure réelle, isolée pour ne pas être faussée par les tests parallèles. |
+| 51 | **Vidéo par étape (mode cuisine) = recherche YouTube automatique** via Edge Function `step-videos` (code commun `_shared/stepVideos.ts`, middleware Vite `/api/step-videos`) : YouTube Data API v3 en `fetch` (`type=video`, `videoEmbeddable`, `videoSyndicated`, `safeSearch=strict`, `relevanceLanguage=fr`, `regionCode=FR`), 5 résultats par étape, **jamais la même vidéo pour deux étapes** (choix dans l'ordre des étapes) | Choix validé (plutôt qu'une liste de techniques choisies à la main ou des clips d'illustration) : couvre toutes les recettes, importées comprises. Les recettes n'ont pas de vidéo par étape (Marmiton : au mieux une par recette, dans le JSON-LD). |
+| 52 | **Requêtes tirées du texte par défaut, sans IA** (`fallbackQuery`) : première proposition de l'étape, sans quantités, mots vides ni élisions, 6 mots au plus, suivis du nom du plat ; aucune recherche si l'étape commence par un verbe sans geste (servez, laissez, goûtez, réservez…) ou compte moins de 2 mots. **Option payante** `STEP_VIDEOS_CLAUDE=1` : requêtes formulées par Claude (`_shared/stepVideoQueries.ts`, `claude-opus-5-5`, `effort: low`, sortie structurée, `fallbacks: "default"`), repli sur le texte en cas d'échec | Choix validé : pas de coût d'API par défaut (un appel Claude par recette non encore en cache). YouTube cherche par mots-clés : retirer les mots vides garde les gestes et ingrédients. Seul `stepVideoQueries.ts` importe le SDK (jamais dans le bundle : vérifié). |
+| 53 | **Cache partagé** `step_videos_cache(key sha256, video jsonb, created_at)` : clé = SHA-256 de recette + étape normalisées (casse, accents, espaces), vidéo gardée 30 j, « aucune vidéo » 7 j ; lu / écrit en PostgREST avec la clé `service_role` (RLS sans politique, droits retirés à anon / authenticated) ; table absente = sans cache. Échec YouTube (quota épuisé…) : `partial: true`, rien n'est mis en cache, ni côté serveur ni côté client. Client : une requête par recette et par session (`StepVideoFinder`), vidéos revérifiées (id de 11 caractères, il finit dans une URL d'iframe) | Quota gratuit ≈ 100 recherches / jour : les recettes de départ, identiques pour tous, ne coûtent qu'une fois. Une clé courte évite les URL PostgREST géantes et l'échappement de `in.(…)`. |
+| 54 | **Affichage = miniature, lecture au toucher** (`StepVideo`, `<figure>` + légende titre / chaîne · YouTube) : aucun lecteur ni cookie avant le toucher ; lecteur `youtube-nocookie.com/embed/…?autoplay=1&playsinline=1&rel=0`, `referrerPolicy=strict-origin-when-cross-origin` ; remonté par étape (`key`) : changer d'étape arrête la vidéo ; miniature de l'étape suivante préchargée ; squelette 16:9 pendant la recherche ; service indisponible ou étape sans vidéo → rien. Corps du mode cuisine défilable (`.cookBody`), étape > 110 caractères en 26 px. Miniatures en cache SW à part (`video-thumbnails`, 60 entrées, 7 j) | Choix validés (mode cuisine seulement, lecture au toucher). Économise la 4G et la batterie, rien ne démarre par surprise. `playsinline` évite le plein écran forcé sur iPhone ; YouTube refuse la lecture intégrée sans référent (erreur 153). Cache à part : les miniatures n'évincent pas les photos des recettes. |
+| 55 | E2E : `/api/step-videos` simulé **sur le contexte** (503 par défaut, `stubStepVideos`) ; le test vidéo bloque le service worker (`serviceWorkers: 'block'`) | Une fois le SW actif, `page.route` ne voit plus la requête, et le corps d'un POST passé par le SW n'est pas lisible par Playwright (le test restait bloqué au hasard). Les parcours n'appellent jamais YouTube ni Claude, même avec des clés dans `.env.local`. |
+
+## Vidéos du mode cuisine (terminé le 2026-11-20)
+
+Choix validés : recherche YouTube automatique, miniature lue au toucher, mode cuisine seulement. Détails : ADR 51-55.
+
+- [x] Contrat sans dépendance (`_shared/stepVideosContract.ts`) : `StepVideo`, bornes, URL de miniature et de lecteur
+- [x] Serveur commun (`_shared/stepVideos.ts`) : validation, clé de cache SHA-256, recherche YouTube, sans doublon,
+      réponse partielle, caches mémoire / PostgREST ; requêtes tirées du texte (défaut, gratuit), Claude en option
+      (`STEP_VIDEOS_CLAUDE=1`, `stepVideoQueries.ts`)
+- [x] Edge Function `step-videos` (JWT `authenticated`, 60 recettes/h/utilisateur) + middleware Vite + déploiement CI
+- [x] SQL : table `step_videos_cache` (RLS sans politique)
+- [x] Client `StepVideoFinder` (cache de session, réponse revérifiée), dépendance du store
+- [x] UI : composant `StepVideo`, mode cuisine défilable, préchargement de la miniature suivante, cache SW des miniatures
+- [x] Tests : 36 unitaires (serveur, Claude simulé, client, écran) + E2E iPhone / Android (lecteur simulé, 16:9, axe), doc
 
 ## Performance (terminé le 2026-11-20)
 
@@ -155,6 +174,7 @@ Voir `supabase/schema.sql`. Toutes les tables ont `user_id` + RLS `auth.uid() = 
 - `fridge_items(id, user_id, name, category, created_at)`
 - `planned_meals(user_id, meal_date, meal 0-1, recipe_id)` — PK (user_id, meal_date, meal)
 - `plan_entries(user_id, day 0-6, meal 0-1, recipe_id)` — ancienne semaine type, vidée par la migration (gardée pour les anciens clients)
+- `step_videos_cache(key, video, created_at)` — cache partagé des vidéos du mode cuisine, **sans `user_id`** : réservé à l'Edge Function (`service_role`), invisible des clients
 
 Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisateur (`profiles.seeded`).
 
@@ -167,7 +187,7 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
 | Accueil | `#/home` | ☑ |
 | Détail recette | `#/recipe/:id` | ☑ |
 | Modifier la recette (appui long › Modifier) | `#/recipe/:id/edit` | ☑ |
-| Mode cuisine | `#/recipe/:id/cook` | ☑ |
+| Mode cuisine (+ vidéo YouTube par étape) | `#/recipe/:id/cook` | ☑ |
 | Planning | `#/planning` | ☑ |
 | Frigo | `#/fridge` | ☑ |
 | Frigo › Remplir avec une photo (scan + revue) | `#/fridge` | ☑ |
@@ -204,6 +224,11 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
       (ou secrets `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_REF` pour le déploiement auto en CI).
 - [ ] Planning sur plusieurs semaines : ré-exécuter `supabase/schema.sql` (crée `planned_meals`, y déplace le planning
       actuel vers la semaine en cours). D'ici là l'app reste utilisable, mais seule la semaine en cours est modifiable.
+- [ ] Vidéos du mode cuisine : créer une clé YouTube Data API v3 (Google Cloud Console), puis
+      `npx supabase secrets set YOUTUBE_API_KEY=... --project-ref <ref>`, ré-exécuter `supabase/schema.sql`
+      (table `step_videos_cache`) et `npx supabase functions deploy step-videos --project-ref <ref> --use-api`
+      (auto en CI si secrets Supabase présents). Sans clé, le mode cuisine s'affiche sans vidéo. Option payante :
+      `STEP_VIDEOS_CLAUDE=1` (requêtes formulées par Claude), laissée désactivée.
 - [x] Nombre de personnes : ré-exécuter `supabase/schema.sql` (ajoute `recipes.servings` et `profiles.household`),
       puis redéployer `recipe-import` (champ `servingsCount`). Sans redéploiement, l'app relit « 4 personnes » elle-même.
 
@@ -248,6 +273,11 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
 - 2026-11-20 : passe performance (ADR 48-50). Score frigo indexé, mémoïsation ciblée, rendus différés ; tests de rendus,
   de complexité, benchmarks et e2e de réactivité (CPU ×4). 385 tests unitaires/intégration (95,8 % lignes), 48 E2E +
   2 E2E perf verts, Lighthouse 100 / 100 / 100. JS initial 112,0 KiB / 130.
+
+- 2026-11-20 : mode cuisine — vidéo YouTube sous chaque étape (ADR 51-55). Requêtes tirées du texte des étapes
+  (sans IA, gratuit ; Claude en option payante `STEP_VIDEOS_CLAUDE=1`), recherche
+  YouTube côté serveur, cache partagé 30 j, miniature lue au toucher. 421 tests unitaires/intégration (96 % lignes),
+  50 E2E hors réseau verts (iPhone + Android). JS initial 113,3 KiB / 130.
 
 ## Pistes V2
 

@@ -7,6 +7,7 @@ import type { Repository } from '../data/repository';
 import { defaultImporter, type RecipeImporter } from '../data/recipeImport';
 import { createImageFinder, type ImageFinder } from '../data/recipeImages';
 import { defaultScanner, type FridgeScanner } from '../data/fridgeScan';
+import { defaultStepVideoFinder, type StepVideoFinder } from '../data/stepVideos';
 
 export type Sheet =
   /** Choisir le plat d'un créneau du planning. */
@@ -32,6 +33,8 @@ export interface AppState {
   importer: RecipeImporter;
   /** Détection d'aliments sur photo (dépendance, non réactive). */
   scanner: FridgeScanner;
+  /** Vidéo YouTube par étape du mode cuisine (dépendance, non réactive). */
+  videos: StepVideoFinder;
 }
 
 export interface AppActions {
@@ -85,6 +88,7 @@ export function createAppStore(
   importer: RecipeImporter = defaultImporter(repo.mode, () => repo.getAccessToken()),
   images: ImageFinder = createImageFinder(importer),
   scanner: FridgeScanner = defaultScanner(repo.mode, () => repo.getAccessToken()),
+  videos: StepVideoFinder = defaultStepVideoFinder(repo.mode, () => repo.getAccessToken()),
 ) {
   let toastSeq = 0;
   /** Recherches de photo déjà lancées cette session (`id` ou `id|urlCassée`). */
@@ -140,6 +144,7 @@ export function createAppStore(
       splashSeen: false,
       importer,
       scanner,
+      videos,
 
       async init() {
         unsubscribe?.();

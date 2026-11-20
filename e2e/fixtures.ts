@@ -28,6 +28,17 @@ export async function stubRecipePhotos(page: Page) {
   await page.context().route(`${PHOTO_ORIGIN}/**`, (route) => route.fulfill({ path: 'public/icons/icon-192.png', contentType: 'image/png' }));
 }
 
+/**
+ * Vidéos du mode cuisine : par défaut « non configurées » (503), comme sans clé YouTube. Les parcours n'appellent
+ * jamais YouTube ni Claude, même si `.env.local` contient des clés. Routé sur le contexte : une fois le service worker
+ * actif, la requête passe par lui et `page.route` ne la voit plus. Un `context().route` posé ensuite reste prioritaire.
+ */
+export async function stubStepVideos(page: Page) {
+  await page.context().route('**/api/step-videos', (route) =>
+    route.fulfill({ status: 503, json: { error: 'Les vidéos ne sont pas configurées (clé YOUTUBE_API_KEY absente).' } }),
+  );
+}
+
 /** Connexion en mode démo (LocalRepository : aucun réseau). */
 export async function login(page: Page, email = 'toto@cuisine.fr') {
   await page.goto('./');
@@ -39,9 +50,12 @@ export async function login(page: Page, email = 'toto@cuisine.fr') {
 }
 
 export const test = base.extend<{ loggedIn: Page }>({
-  // Hors projet `live`, les photos automatiques sont simulées : les parcours ne dépendent pas de Marmiton.
+  // Hors projet `live`, photos automatiques et vidéos simulées : les parcours ne dépendent ni de Marmiton ni de YouTube.
   page: async ({ page }, use, testInfo) => {
-    if (testInfo.project.name !== 'live') await stubRecipePhotos(page);
+    if (testInfo.project.name !== 'live') {
+      await stubRecipePhotos(page);
+      await stubStepVideos(page);
+    }
     await use(page);
   },
   loggedIn: async ({ page }, use) => {
