@@ -1,3 +1,4 @@
+import type { IsoDate } from '../domain/calendar';
 import type { FoodCategory, FridgeItem, Profile, Recipe, RecipeDraft, User, UserData } from '../domain/types';
 
 /**
@@ -32,7 +33,8 @@ export interface Repository {
   /** Ajout groupé (scan photo) : une seule requête ; renvoie les aliments créés dans l'ordre reçu. */
   addFridgeItems(user: User, items: readonly { name: string; category: FoodCategory }[]): Promise<FridgeItem[]>;
   removeFridgeItem(user: User, id: string): Promise<void>;
-  setPlanEntry(user: User, day: number, meal: number, recipeId: string | null): Promise<void>;
+  /** Place une recette (ou rien : `null`) au repas `meal` (0 midi, 1 soir) du jour `date`. */
+  setPlanEntry(user: User, date: IsoDate, meal: number, recipeId: string | null): Promise<void>;
 }
 
 export class RepositoryError extends Error {}

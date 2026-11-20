@@ -1,5 +1,7 @@
+import { addDays, isIsoDate, type IsoDate } from './calendar';
 import {
   FOOD_CATEGORIES,
+  MEALS,
   type FoodCategory,
   type FridgeItem,
   type Level,
@@ -129,21 +131,55 @@ export function initials(name: string): string {
 
 /* ---------- Planning ---------- */
 
-export function planKey(day: number, meal: number): string {
-  return `${day}-${meal}`;
+/** Clé d'un créneau : `AAAA-MM-JJ:repas` (repas 0 = midi, 1 = soir). */
+export function planKey(date: IsoDate, meal: number): string {
+  return `${date}:${meal}`;
 }
 
-export function plannedCount(plan: Plan, recipeIds?: ReadonlySet<string>): number {
-  return Object.values(plan).filter((id) => !recipeIds || recipeIds.has(id)).length;
+const PLAN_KEY_RE = /^(\d{4}-\d{2}-\d{2}):([01])$/;
+
+/** Date et repas d'une clé du planning ; `null` si la clé n'est pas au format daté. */
+export function parsePlanKey(key: string): { date: IsoDate; meal: number } | null {
+  const m = PLAN_KEY_RE.exec(key);
+  return m && isIsoDate(m[1]) ? { date: m[1], meal: Number(m[2]) } : null;
 }
 
-export function dayHasMeal(plan: Plan, day: number): boolean {
-  return Boolean(plan[planKey(day, 0)] || plan[planKey(day, 1)]);
+/** Créneaux remplis parmi les `dates` données (recettes supprimées ignorées si `recipeIds` est fourni). */
+export function plannedCount(plan: Plan, dates: readonly IsoDate[], recipeIds?: ReadonlySet<string>): number {
+  let n = 0;
+  for (const date of dates)
+    for (let meal = 0; meal < MEALS.length; meal++) {
+      const id = plan[planKey(date, meal)];
+      if (id && (!recipeIds || recipeIds.has(id))) n++;
+    }
+  return n;
 }
 
-/** Lundi = 0 … Dimanche = 6. */
-export function weekdayIndex(date: Date = new Date()): number {
-  return (date.getDay() + 6) % 7;
+/** Repas prévus à partir d'aujourd'hui (inclus). */
+export function upcomingCount(plan: Plan, today: IsoDate, recipeIds?: ReadonlySet<string>): number {
+  return Object.entries(plan).filter(([key, id]) => {
+    const slot = parsePlanKey(key);
+    return slot && slot.date >= today && (!recipeIds || recipeIds.has(id));
+  }).length;
+}
+
+export function dayHasMeal(plan: Plan, date: IsoDate): boolean {
+  return MEALS.some((_, meal) => Boolean(plan[planKey(date, meal)]));
+}
+
+/**
+ * Ancien planning « semaine type » (clés `jour-repas`, jour 0 = lundi) → repas datés de la semaine
+ * commençant le lundi `week`. Les clés déjà datées sont gardées, les clés inconnues ignorées.
+ */
+export function datedPlan(plan: Readonly<Record<string, string>>, week: IsoDate): Plan {
+  const out: Plan = {};
+  for (const [key, id] of Object.entries(plan)) {
+    if (typeof id !== 'string' || !id) continue;
+    if (parsePlanKey(key)) out[key] = id;
+    const legacy = /^([0-6])-([01])$/.exec(key);
+    if (legacy) out[planKey(addDays(week, Number(legacy[1])), Number(legacy[2]))] ??= id;
+  }
+  return out;
 }
 
 /* ---------- Formulaire nouvelle recette ---------- */

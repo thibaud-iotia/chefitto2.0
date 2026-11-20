@@ -20,14 +20,16 @@ import {
   matchScore,
   moveItem,
   normalize,
+  datedPlan,
+  parsePlanKey,
   planKey,
   plannedCount,
   rankBySuggestion,
   removeStep,
   ringTone,
   splitList,
+  upcomingCount,
   validateAuth,
-  weekdayIndex,
 } from './logic';
 import type { FridgeItem, Recipe } from './types';
 
@@ -130,19 +132,43 @@ describe('helpers', () => {
 });
 
 describe('planning', () => {
-  const plan = { [planKey(0, 0)]: 'a', [planKey(0, 1)]: 'b', [planKey(2, 1)]: 'zz' };
-  it('compte, filtre les recettes supprimées', () => {
-    expect(plannedCount(plan)).toBe(3);
-    expect(plannedCount(plan, new Set(['a', 'b']))).toBe(2);
+  const plan = {
+    [planKey('2026-11-16', 0)]: 'a',
+    [planKey('2026-11-16', 1)]: 'b',
+    [planKey('2026-11-18', 1)]: 'zz',
+    [planKey('2026-11-24', 0)]: 'a',
+  };
+  const week = ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20', '2026-11-21', '2026-11-22'];
+
+  it('clé datée, aller-retour', () => {
+    expect(planKey('2026-11-16', 1)).toBe('2026-11-16:1');
+    expect(parsePlanKey('2026-11-16:1')).toEqual({ date: '2026-11-16', meal: 1 });
+    expect(parsePlanKey('2026-11-16:2')).toBeNull();
+    expect(parsePlanKey('2026-02-30:0')).toBeNull();
+    expect(parsePlanKey('1-0')).toBeNull();
+  });
+  it('compte les créneaux d’une semaine, filtre les recettes supprimées', () => {
+    expect(plannedCount(plan, week)).toBe(3);
+    expect(plannedCount(plan, week, new Set(['a', 'b']))).toBe(2);
+    expect(plannedCount(plan, ['2026-11-24'])).toBe(1);
+    expect(plannedCount(plan, [])).toBe(0);
+  });
+  it('compte les repas à venir (aujourd’hui inclus)', () => {
+    expect(upcomingCount(plan, '2026-11-18')).toBe(2);
+    expect(upcomingCount(plan, '2026-11-18', new Set(['a']))).toBe(1);
+    expect(upcomingCount({ ...plan, 'clé-inconnue': 'a' }, '2026-01-01')).toBe(4);
   });
   it('détecte un jour planifié', () => {
-    expect(dayHasMeal(plan, 0)).toBe(true);
-    expect(dayHasMeal(plan, 2)).toBe(true);
-    expect(dayHasMeal(plan, 1)).toBe(false);
+    expect(dayHasMeal(plan, '2026-11-16')).toBe(true);
+    expect(dayHasMeal(plan, '2026-11-18')).toBe(true);
+    expect(dayHasMeal(plan, '2026-11-17')).toBe(false);
   });
-  it('weekdayIndex : lundi = 0, dimanche = 6', () => {
-    expect(weekdayIndex(new Date(2026, 10, 16))).toBe(0); // lundi
-    expect(weekdayIndex(new Date(2026, 10, 15))).toBe(6); // dimanche
+  it('convertit l’ancienne semaine type en repas datés', () => {
+    const legacy = { '0-0': 'a', '6-1': 'b', '2026-11-30:0': 'c', '7-0': 'x', '0-2': 'y', 'n/a': 'z', '1-0': '' };
+    expect(datedPlan(legacy, '2026-11-16')).toEqual({ '2026-11-16:0': 'a', '2026-11-22:1': 'b', '2026-11-30:0': 'c' });
+    // Une date déjà présente l'emporte sur la semaine type.
+    expect(datedPlan({ '0-0': 'old', '2026-11-16:0': 'new' }, '2026-11-16')).toEqual({ '2026-11-16:0': 'new' });
+    expect(datedPlan({ '2026-11-16:0': 'new', '0-0': 'old' }, '2026-11-16')).toEqual({ '2026-11-16:0': 'new' });
   });
 });
 
@@ -275,7 +301,7 @@ describe('recipeToForm (modification)', () => {
 
 describe('withoutRecipes', () => {
   it('retire les recettes supprimées du planning et des favoris', () => {
-    const out = withoutRecipes({ '0-0': 'a', '0-1': 'b', '3-1': 'c' }, ['a', 'c', 'd'], new Set(['a', 'c']));
-    expect(out).toEqual({ plan: { '0-1': 'b' }, favorites: ['d'] });
+    const out = withoutRecipes({ '2026-11-16:0': 'a', '2026-11-16:1': 'b', '2026-12-03:1': 'c' }, ['a', 'c', 'd'], new Set(['a', 'c']));
+    expect(out).toEqual({ plan: { '2026-11-16:1': 'b' }, favorites: ['d'] });
   });
 });

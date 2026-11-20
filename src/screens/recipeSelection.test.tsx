@@ -122,7 +122,7 @@ describe('Accueil — suppression', () => {
     const { user, store } = await renderApp({ route: '/home' });
     const id = store.getState().recipes[0]!.id;
     await act(() => store.getState().toggleFavorite(id));
-    await act(() => store.getState().setPlanEntry(2, 1, id));
+    await act(() => store.getState().setPlanEntry('2026-12-02', 1, id));
 
     longPress(VEGGIE);
     await user.click(screen.getByRole('button', { name: 'Supprimer' }));

@@ -140,15 +140,26 @@ describe('appStore — mutations', () => {
     expect(store.getState().fridge.some((f) => f.id === id)).toBe(false);
   });
 
-  it('planifie et retire un repas, ferme la sheet', async () => {
-    const { store } = await readyStore();
+  it('planifie et retire un repas daté, ferme la sheet', async () => {
+    const { store, repo } = await readyStore();
     const id = store.getState().recipes[0]!.id;
-    store.getState().openSheet({ type: 'pick', day: 2, meal: 1 });
-    await store.getState().setPlanEntry(2, 1, id);
-    expect(store.getState().plan['2-1']).toBe(id);
+    store.getState().openSheet({ type: 'pick', date: '2026-12-02', meal: 1 });
+    expect(await store.getState().setPlanEntry('2026-12-02', 1, id)).toBe(true);
+    expect(store.getState().plan['2026-12-02:1']).toBe(id);
     expect(store.getState().sheet).toBeNull();
-    await store.getState().setPlanEntry(2, 1, null);
-    expect(store.getState().plan['2-1']).toBeUndefined();
+    expect((await repo.loadAll(store.getState().user!)).plan).toEqual({ '2026-12-02:1': id });
+    expect(await store.getState().setPlanEntry('2026-12-02', 1, null)).toBe(true);
+    expect(store.getState().plan['2026-12-02:1']).toBeUndefined();
+  });
+
+  it('planification refusée : rollback, message, false', async () => {
+    const { store, repo } = await readyStore();
+    const id = store.getState().recipes[0]!.id;
+    await store.getState().setPlanEntry('2026-11-16', 0, id);
+    vi.spyOn(repo, 'setPlanEntry').mockRejectedValueOnce(new RepositoryError('Mettez à jour la base'));
+    expect(await store.getState().setPlanEntry('2026-11-30', 0, id)).toBe(false);
+    expect(store.getState().plan).toEqual({ '2026-11-16:0': id });
+    expect(store.getState().toast?.text).toBe('Mettez à jour la base');
   });
 
   it('ajoute une recette en tête', async () => {
@@ -186,29 +197,29 @@ describe('appStore — mutations', () => {
     const [a, b, c] = store.getState().recipes;
     await store.getState().toggleFavorite(a!.id);
     await store.getState().toggleFavorite(c!.id);
-    await store.getState().setPlanEntry(0, 0, a!.id);
-    await store.getState().setPlanEntry(1, 0, b!.id);
-    await store.getState().setPlanEntry(1, 1, c!.id);
+    await store.getState().setPlanEntry('2026-11-16', 0, a!.id);
+    await store.getState().setPlanEntry('2026-11-17', 0, b!.id);
+    await store.getState().setPlanEntry('2026-12-08', 1, c!.id);
     expect(await store.getState().deleteRecipes([a!.id, b!.id])).toBe(true);
     const st = store.getState();
     expect(st.recipes).toHaveLength(SEED_RECIPES.length - 2);
     expect(st.favorites).toEqual([c!.id]);
-    expect(st.plan).toEqual({ '1-1': c!.id });
+    expect(st.plan).toEqual({ '2026-12-08:1': c!.id });
     const saved = await repo.loadAll(st.user!);
     expect(saved.recipes).toHaveLength(SEED_RECIPES.length - 2);
-    expect(saved.plan).toEqual({ '1-1': c!.id });
+    expect(saved.plan).toEqual({ '2026-12-08:1': c!.id });
   });
 
   it('suppression refusée : tout est restauré ; liste vide : rien à faire', async () => {
     const { store, repo } = await readyStore();
     const id = store.getState().recipes[0]!.id;
     await store.getState().toggleFavorite(id);
-    await store.getState().setPlanEntry(3, 0, id);
+    await store.getState().setPlanEntry('2026-11-19', 0, id);
     const spy = vi.spyOn(repo, 'deleteRecipes').mockRejectedValueOnce(new Error('Connexion réseau impossible'));
     expect(await store.getState().deleteRecipes([id])).toBe(false);
     expect(store.getState().recipes[0]!.id).toBe(id);
     expect(store.getState().favorites).toEqual([id]);
-    expect(store.getState().plan['3-0']).toBe(id);
+    expect(store.getState().plan['2026-11-19:0']).toBe(id);
     expect(store.getState().toast?.text).toBe('Connexion réseau impossible');
     expect(await store.getState().deleteRecipes([])).toBe(true);
     expect(spy).toHaveBeenCalledTimes(1);
@@ -248,6 +259,8 @@ describe('appStore — mutations', () => {
     store.getState().flash('a');
     expect(store.getState().toast!.id).toBeGreaterThan(id1);
     store.getState().openSheet({ type: 'plan', recipeId: 'r' });
+    store.getState().openSheet({ type: 'plan', recipeId: 'r', week: '2026-11-23' });
+    expect(store.getState().sheet).toEqual({ type: 'plan', recipeId: 'r', week: '2026-11-23' });
     store.getState().closeSheet();
     expect(store.getState().sheet).toBeNull();
     store.getState().setSplashSeen();

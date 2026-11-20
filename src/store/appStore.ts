@@ -1,13 +1,19 @@
 import { createStore } from 'zustand/vanilla';
 import { capitalize, planKey, sameFood, withoutRecipes } from '../domain/logic';
 import { clampServings, DEFAULT_HOUSEHOLD } from '../domain/servings';
+import type { IsoDate } from '../domain/calendar';
 import type { FoodCategory, FridgeItem, Plan, Profile, Recipe, RecipeDraft, User } from '../domain/types';
 import type { Repository } from '../data/repository';
 import { defaultImporter, type RecipeImporter } from '../data/recipeImport';
 import { createImageFinder, type ImageFinder } from '../data/recipeImages';
 import { defaultScanner, type FridgeScanner } from '../data/fridgeScan';
 
-export type Sheet = { type: 'pick'; day: number; meal: number } | { type: 'plan'; recipeId: string } | null;
+export type Sheet =
+  /** Choisir le plat d'un créneau du planning. */
+  | { type: 'pick'; date: IsoDate; meal: number }
+  /** Choisir le créneau d'un plat (« Planifier » sur la fiche), semaine affichée = lundi `week` (défaut : semaine en cours). */
+  | { type: 'plan'; recipeId: string; week?: IsoDate }
+  | null;
 
 export interface AppState {
   status: 'booting' | 'anon' | 'loading' | 'ready' | 'error';
@@ -43,7 +49,8 @@ export interface AppActions {
    */
   addFridgeItems(items: readonly { name: string; category: FoodCategory }[]): Promise<number>;
   removeFridgeItem(id: string): Promise<void>;
-  setPlanEntry(day: number, meal: number, recipeId: string | null): Promise<void>;
+  /** Place (ou retire : `null`) une recette au repas `meal` du jour `date`, ferme la sheet. `false` en cas d'échec. */
+  setPlanEntry(date: IsoDate, meal: number, recipeId: string | null): Promise<boolean>;
   addRecipe(draft: RecipeDraft): Promise<Recipe | null>;
   /** Modifie une recette (mise à jour optimiste). `false` en cas d'échec, avec un message. */
   updateRecipe(recipeId: string, draft: RecipeDraft): Promise<boolean>;
@@ -253,15 +260,15 @@ export function createAppStore(
         );
       },
 
-      async setPlanEntry(day, meal, recipeId) {
-        await optimistic(
+      setPlanEntry(date, meal, recipeId) {
+        return optimistic(
           (s) => {
             const plan = { ...s.plan };
-            if (recipeId) plan[planKey(day, meal)] = recipeId;
-            else delete plan[planKey(day, meal)];
+            if (recipeId) plan[planKey(date, meal)] = recipeId;
+            else delete plan[planKey(date, meal)];
             return { plan, sheet: null };
           },
-          (u) => repo.setPlanEntry(u, day, meal, recipeId),
+          (u) => repo.setPlanEntry(u, date, meal, recipeId),
         );
       },
 

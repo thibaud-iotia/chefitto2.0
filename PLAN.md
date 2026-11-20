@@ -52,6 +52,25 @@ via « Ajouter à l'écran d'accueil » (pas de compte Apple Developer).
 | 38 | **Mode sélection = au moins une recette cochée** (multi-sélection) : le lien de la carte devient un bouton `aria-pressed`, le cœur une pastille ; barre d'actions contextuelle **en haut** (par-dessus l'en-tête, hors défilement) : Annuler · « N sélectionnée(s) » · Modifier (une seule recette) · Supprimer, en **icônes** 44 px avec libellés accessibles. Échap, « Annuler », décocher la dernière carte ou changer de filtre / recherche quittent la sélection ; le focus reste sur la carte à l'origine | En bas, la barre se battait avec la navigation et le bouton « + » qui dépasse. Libellés texte + compteur ne tiennent pas sur 393 px. Changer de filtre vide la sélection : on ne supprime jamais une recette qu'on ne voit plus. |
 | 39 | **Suppression confirmée** (bottom sheet : « Supprimer définitivement » / « Annuler », sous-titre « retirée(s) du planning » si un repas planifié est concerné, sinon « irréversible »), optimiste avec retour arrière ; `deleteRecipes` en une requête (`delete … in (ids)`), favoris et créneaux du planning supprimés par `on delete cascade` (déjà dans le schéma) et retirés localement (`withoutRecipes`) | Action destructrice sans corbeille : une confirmation suffit (pas d'annulation différée à maintenir). Aucune migration SQL : RLS `for all` et cascades existaient déjà. |
 | 40 | **Modification** = route `#/recipe/:id/edit`, même formulaire que « Nouvelle recette » (`RecipeFields`) sur un store de formulaire **propre à l'écran** (`createRecipeFormStore`, `recipeToForm`) ; temps, niveau, coût et photo conservés ; `updateRecipe` optimiste. Supabase : `update … select('id')`, 0 ligne → « Recette introuvable » ; `image_url` toujours envoyée (même `null`), colonnes optionnelles retirées si la base n'est pas migrée | Le brouillon de création (conservé pendant l'import) n'est jamais écrasé. Sans `select`, une recette supprimée sur un autre appareil serait « enregistrée » sans erreur. |
+| 41 | **Planning daté** : table `planned_meals(user_id, meal_date date, meal 0-1, recipe_id)`, PK `(user_id, meal_date, meal)`, index sur `recipe_id` (cascade). Clé du store `AAAA-MM-JJ:repas` (`planKey`). Ancienne table `plan_entries` gardée (anciens clients en cache) ; `schema.sql` y **déplace** son contenu (`delete … returning` → `insert`) vers la semaine en cours, heure de Paris : ré-exécuter le script ne déplace rien deux fois | Une semaine type ne permet pas de préparer la semaine suivante. Nouvelle table plutôt que changer la PK de l'ancienne : aucun client, ancien ou nouveau, n'écrit dans un format qu'il ne comprend pas. |
+| 42 | **Front déployable avant la migration** : si `planned_meals` est inconnue (`PGRST205` / `42P01` / « could not find the table »), lecture de `plan_entries` affichée comme la semaine en cours et écritures limitées à cette semaine (sinon « Mettez à jour la base… ») ; toute autre erreur reste une erreur. Mode local : anciennes clés `jour-repas` converties à la lecture (`datedPlan`) | Même principe que les colonnes optionnelles (ADR 36) : le déploiement Pages est automatique, la migration SQL est manuelle. |
+| 43 | **Dates = chaînes locales `AAAA-MM-JJ`**, calculs via `Date.UTC` (`domain/calendar.ts`), libellés français écrits à la main (pas d'`Intl`) | `toISOString()` décale d'un jour le soir en France ; l'arithmétique en ms sur l'heure locale casse aux changements d'heure. Libellés déterministes quel que soit l'ICU du navigateur / de Node. |
+| 44 | **Navigation semaine par semaine** (`WeekNav` : ‹ « Semaine du 23 au 29 nov. » ›, `aria-live`), puces « Lun 23 » ; **horizon = semaine en cours + 3** (`PLAN_WEEKS_AHEAD`) ; **historique sans limite** en arrière (jours passés atténués, toujours modifiables) ; « Aujourd'hui » hors de la semaine en cours ; changer de semaine garde le jour de la semaine. Flèches aux bornes en `aria-disabled` (pas `disabled`) | Choix validés. 4 semaines couvrent un mois de courses sans liste infinie. `disabled` ferait perdre le focus clavier au moment où l'on atteint la borne. |
+| 45 | **« Planifier » (fiche)** : même `WeekNav` dans la feuille (semaine stockée dans `sheet.week`), créneaux à partir d'aujourd'hui seulement, « déjà prévu » si la recette y est ; toast « Ajouté au planning · lundi 23 nov. midi » **seulement si l'écriture a réussi** (`setPlanEntry` renvoie un booléen). Accueil = repas de la semaine en cours, Profil = repas à venir | Avec 56 créneaux, une liste unique serait illisible ; planifier dans le passé n'a pas de sens depuis la fiche (reste possible depuis le planning). Le toast mentionne la date : on vérifie d'un coup d'œil la bonne semaine. |
+
+## Planning sur plusieurs semaines (terminé le 2026-11-20)
+
+Choix validés : navigation semaine par semaine, 4 semaines planifiables (en cours + 3), historique consultable,
+ancienne semaine type migrée vers la semaine en cours. Détails : ADR 41-45.
+
+- [x] Domaine : `calendar.ts` (dates locales, semaines du lundi, horizon, libellés FR), `planKey(date, repas)`,
+      `plannedCount` par dates, `upcomingCount`, `datedPlan` (conversion de la semaine type)
+- [x] SQL : table `planned_meals` + RLS + index, migration idempotente depuis `plan_entries`
+- [x] Repos : Supabase (table datée, repli tant que la migration n'est pas passée), local (anciennes données converties)
+- [x] Store : `setPlanEntry(date, …)` → booléen ; sheet `pick` datée, sheet `plan` avec semaine
+- [x] UI : `WeekNav`, écran Planning (puces datées, aujourd'hui, jours passés, « Aujourd'hui »), feuille « Planifier »
+      par semaine ; puces resserrées (gap 6 px) : les 7 jours tiennent sur 393 px sans défilement
+- [x] Tests unitaires (dates, changement d'heure, migration, repli Supabase, écrans à date figée) + E2E (`page.clock`), doc
 
 ## Nombre de personnes (terminé le 2026-11-18)
 
@@ -105,7 +124,8 @@ Voir `supabase/schema.sql`. Toutes les tables ont `user_id` + RLS `auth.uid() = 
 - `recipes(id, user_id, name, category, price, time_min, level, description, ingredients text[], steps text[], servings 1-50, image_url, created_at)`
 - `favorites(user_id, recipe_id)`
 - `fridge_items(id, user_id, name, category, created_at)`
-- `plan_entries(user_id, day 0-6, meal 0-1, recipe_id)` — PK (user_id, day, meal)
+- `planned_meals(user_id, meal_date, meal 0-1, recipe_id)` — PK (user_id, meal_date, meal)
+- `plan_entries(user_id, day 0-6, meal 0-1, recipe_id)` — ancienne semaine type, vidée par la migration (gardée pour les anciens clients)
 
 Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisateur (`profiles.seeded`).
 
@@ -153,6 +173,8 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
       `npx supabase functions deploy fridge-scan --project-ref <ref> --use-api` (auto en CI si secrets Supabase présents).
 - [ ] Déployer la fonction d'import : `npx supabase functions deploy recipe-import --project-ref <ref> --use-api`
       (ou secrets `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_REF` pour le déploiement auto en CI).
+- [ ] Planning sur plusieurs semaines : ré-exécuter `supabase/schema.sql` (crée `planned_meals`, y déplace le planning
+      actuel vers la semaine en cours). D'ici là l'app reste utilisable, mais seule la semaine en cours est modifiable.
 - [x] Nombre de personnes : ré-exécuter `supabase/schema.sql` (ajoute `recipes.servings` et `profiles.household`),
       puis redéployer `recipe-import` (champ `servingsCount`). Sans redéploiement, l'app relit « 4 personnes » elle-même.
 
@@ -185,6 +207,11 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
   335 tests unitaires/intégration (95,8 % lignes), 44 E2E hors réseau verts (iPhone + Android, appui long tactile réel, axe
   en mode sélection et sur le formulaire). JS initial 109,6 KiB / 130.
 
+- 2026-11-20 : planning sur plusieurs semaines (ADR 41-45). Repas datés, navigation semaine par semaine, 4 semaines
+  planifiables, historique, « Planifier » par semaine depuis la fiche ; migration SQL idempotente + repli si non migrée.
+  357 tests unitaires/intégration (96 % lignes), 46 E2E hors réseau verts (iPhone + Android, date figée, axe sur le
+  planning et la feuille). JS initial 110,9 KiB / 130.
+
 ## Pistes V2
 
 - Nombre de personnes par repas du planning (ex. mardi soir pour 6), utilisé à l'ouverture de la fiche depuis le planning.
@@ -192,6 +219,6 @@ Au premier login, les 8 recettes de la maquette sont insérées pour l'utilisate
 - Choisir / prendre sa propre photo pour une recette (upload Supabase Storage), en plus de la photo automatique.
 - Liste de courses générée depuis les « À acheter ».
 - Sélection : « Tout sélectionner », annulation différée (« Annuler » dans le toast) au lieu de la confirmation.
-- Planning multi-semaines (actuellement une semaine type).
+- Planning : dupliquer une semaine vers la suivante, balayage horizontal entre semaines.
 - Web Share Target (PWA) : « Partager › Chefitto » depuis Marmiton ouvre directement l'import du lien.
 - Limitation de débit sur l'Edge Function si l'app est ouverte à d'autres utilisateurs.

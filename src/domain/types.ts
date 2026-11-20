@@ -38,7 +38,7 @@ export interface FridgeItem {
   category: FoodCategory;
 }
 
-/** Clé `${day}-${meal}` → id de recette. */
+/** Clé `AAAA-MM-JJ:repas` (voir `planKey`) → id de recette. */
 export type Plan = Record<string, string>;
 
 export interface Profile {

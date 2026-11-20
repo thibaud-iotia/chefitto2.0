@@ -126,15 +126,46 @@ describe('LocalRepository', () => {
     const [a, b, c] = (await repo.loadAll(u)).recipes;
     await repo.setFavorite(u, a!.id, true);
     await repo.setFavorite(u, c!.id, true);
-    await repo.setPlanEntry(u, 0, 0, a!.id);
-    await repo.setPlanEntry(u, 1, 1, b!.id);
-    await repo.setPlanEntry(u, 2, 0, c!.id);
+    await repo.setPlanEntry(u, '2026-11-16', 0, a!.id);
+    await repo.setPlanEntry(u, '2026-11-24', 1, b!.id);
+    await repo.setPlanEntry(u, '2026-12-09', 0, c!.id);
     await repo.deleteRecipes(u, [a!.id, b!.id]);
     const d = await repo.loadAll(u);
     expect(d.recipes.map((r) => r.id)).not.toContain(a!.id);
     expect(d.recipes.map((r) => r.id)).not.toContain(b!.id);
     expect(d.recipes).toHaveLength(6);
     expect(d.favorites).toEqual([c!.id]);
-    expect(d.plan).toEqual({ '2-0': c!.id });
+    expect(d.plan).toEqual({ '2026-12-09:0': c!.id });
+  });
+
+  it('planning daté sur plusieurs semaines : place, remplace et retire un repas', async () => {
+    const repo = new LocalRepository();
+    const u = await repo.signIn('plan@cuisine.fr');
+    const [a, b] = (await repo.loadAll(u)).recipes;
+    await repo.setPlanEntry(u, '2026-11-20', 0, a!.id);
+    await repo.setPlanEntry(u, '2026-12-11', 1, a!.id);
+    await repo.setPlanEntry(u, '2026-11-20', 0, b!.id);
+    expect((await repo.loadAll(u)).plan).toEqual({ '2026-11-20:0': b!.id, '2026-12-11:1': a!.id });
+    await repo.setPlanEntry(u, '2026-11-20', 0, null);
+    expect((await repo.loadAll(u)).plan).toEqual({ '2026-12-11:1': a!.id });
+  });
+
+  it('données d’avant le planning daté : la semaine type devient la semaine en cours', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 20, 12)); // vendredi 20 nov. 2026
+    try {
+      const repo = new LocalRepository();
+      const u = await repo.signIn('ancien@cuisine.fr');
+      const key = `chefitto:v1:data:${u.id}`;
+      await repo.loadAll(u); // crée les données de départ
+      const saved = JSON.parse(localStorage.getItem(key)!);
+      localStorage.setItem(key, JSON.stringify({ ...saved, plan: { '0-1': 'r1', '6-0': 'r2' } }));
+      expect((await repo.loadAll(u)).plan).toEqual({ '2026-11-16:1': 'r1', '2026-11-22:0': 'r2' });
+      // La première écriture enregistre le format daté.
+      await repo.setPlanEntry(u, '2026-11-30', 0, 'r3');
+      expect(JSON.parse(localStorage.getItem(key)!).plan).toEqual({ '2026-11-16:1': 'r1', '2026-11-22:0': 'r2', '2026-11-30:0': 'r3' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

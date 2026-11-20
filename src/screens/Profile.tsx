@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { plannedCount } from '../domain/logic';
+import { toIsoDate } from '../domain/calendar';
+import { upcomingCount } from '../domain/logic';
 import { MAX_SERVINGS, MIN_SERVINGS, servingsLabel } from '../domain/servings';
 import { useApp } from '../store/storeContext';
 import { Avatar, Button, Input, Stepper } from '../ui';
@@ -51,7 +52,7 @@ export default function Profile() {
       <div className={s.profileStats}>
         {stat(recipes.length, 'recettes')}
         {stat(favorites.filter((f) => ids.has(f)).length, 'favoris')}
-        {stat(plannedCount(plan, ids), 'planifiés')}
+        {stat(upcomingCount(plan, toIsoDate(), ids), 'repas à venir')}
       </div>
       <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <Input label="Nom" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />

@@ -1,8 +1,14 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { weekdayIndex } from '../domain/logic';
+import { toIsoDate } from '../domain/calendar';
 import { SEED_RECIPES } from '../domain/seed';
 import { renderApp } from '../test/renderApp';
+
+/** Fige la date du jour à midi. Seul `Date` est simulé : les minuteries restent réelles (userEvent, toasts). */
+function setToday(year: number, month: number, day: number) {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(year, month - 1, day, 12));
+}
 
 describe('Splash & Auth', () => {
   it('splash → auth → connexion → accueil', async () => {
@@ -110,7 +116,10 @@ describe('Accueil', () => {
 });
 
 describe('Détail, planification et cuisine', () => {
+  afterEach(() => vi.useRealTimers());
+
   it('ingrédients au frigo, favori, planifier, cuisiner jusqu’au bout', async () => {
+    setToday(2026, 11, 16); // lundi
     const { user, store } = await renderApp({ route: '/home' });
     await user.click(screen.getByRole('link', { name: 'Veggie tomato mix' }));
     expect(screen.getByText('4/5 au frigo')).toBeInTheDocument();
@@ -121,9 +130,9 @@ describe('Détail, planification et cuisine', () => {
 
     await user.click(screen.getByRole('button', { name: 'Planifier' }));
     const sheet = screen.getByRole('dialog', { name: /Planifier Veggie/ });
-    await user.click(within(sheet).getByRole('button', { name: /Mardi · Soir/ }));
-    expect(Object.keys(store.getState().plan)).toEqual(['1-1']);
-    expect(await screen.findByText('Ajouté au planning')).toBeInTheDocument();
+    await user.click(within(sheet).getByRole('button', { name: /Mardi 17 · Soir/ }));
+    expect(Object.keys(store.getState().plan)).toEqual(['2026-11-17:1']);
+    expect(await screen.findByText('Ajouté au planning · mardi 17 nov. soir')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Commencer à cuisiner' }));
     expect(screen.getByText('ÉTAPE 1')).toBeInTheDocument();
@@ -135,6 +144,69 @@ describe('Détail, planification et cuisine', () => {
     await user.click(screen.getByRole('button', { name: 'Terminer' }));
     expect(await screen.findByText('Bon appétit !')).toBeInTheDocument();
     expect(screen.getByText(/Que cuisine-t-on/)).toBeInTheDocument();
+  });
+
+  it('« Planifier » : à partir d’aujourd’hui, sur 4 semaines, semaine par semaine', async () => {
+    setToday(2026, 11, 20); // vendredi
+    const { user, store } = await renderApp({ route: '/home' });
+    const recipe = store.getState().recipes[0]!;
+    await user.click(screen.getByRole('link', { name: recipe.name }));
+    await user.click(screen.getByRole('button', { name: 'Planifier' }));
+    const sheet = screen.getByRole('dialog', { name: `Planifier ${recipe.name}` });
+    const slots = () => within(sheet).getAllByRole('button', { name: / · (Midi|Soir)/ });
+    const prev = () => within(sheet).getByRole('button', { name: 'Semaine précédente' });
+    // Fonctions : la feuille recrée ses flèches à chaque ouverture.
+    const next = () => within(sheet).getByRole('button', { name: 'Semaine suivante' });
+
+    // Semaine en cours : vendredi, samedi, dimanche (pas de créneau dans le passé), pas de retour en arrière.
+    expect(within(sheet).getByText('Semaine du 16 au 22 nov.')).toBeInTheDocument();
+    expect(slots().map((b) => b.textContent)).toEqual([
+      'Vendredi 20 · Midilibre',
+      'Vendredi 20 · Soirlibre',
+      'Samedi 21 · Midilibre',
+      'Samedi 21 · Soirlibre',
+      'Dimanche 22 · Midilibre',
+      'Dimanche 22 · Soirlibre',
+    ]);
+    expect(prev()).toHaveAttribute('aria-disabled', 'true');
+    await user.click(prev());
+    expect(within(sheet).getByText('Semaine du 16 au 22 nov.')).toBeInTheDocument();
+
+    // Semaine suivante : les 14 créneaux.
+    await user.click(next());
+    expect(within(sheet).getByText('Semaine du 23 au 29 nov.')).toBeInTheDocument();
+    expect(slots()).toHaveLength(14);
+    expect(next()).toHaveFocus(); // le focus reste sur la flèche
+    await user.click(within(sheet).getByRole('button', { name: /Lundi 23 · Midi/ }));
+    expect(store.getState().plan).toEqual({ '2026-11-23:0': recipe.id });
+    expect(await screen.findByText('Ajouté au planning · lundi 23 nov. midi')).toBeInTheDocument();
+
+    // Rouverte : semaine en cours ; le créneau choisi est marqué « déjà prévu ».
+    await user.click(screen.getByRole('button', { name: 'Planifier' }));
+    expect(within(sheet).getByText('Semaine du 16 au 22 nov.')).toBeInTheDocument();
+    await user.click(next());
+    expect(within(sheet).getByRole('button', { name: /Lundi 23 · Midi/ })).toHaveTextContent('déjà prévu');
+
+    // Horizon : la semaine du 7 déc. est la dernière.
+    await user.click(next());
+    await user.click(next());
+    expect(within(sheet).getByText('Semaine du 7 au 13 déc.')).toBeInTheDocument();
+    expect(next()).toHaveAttribute('aria-disabled', 'true');
+    await user.click(next());
+    expect(within(sheet).getByText('Semaine du 7 au 13 déc.')).toBeInTheDocument();
+    await user.click(within(sheet).getByRole('button', { name: /Dimanche 13 · Soir/ }));
+    expect(store.getState().plan['2026-12-13:1']).toBe(recipe.id);
+  });
+
+  it('« Planifier » : un échec n’affiche pas « Ajouté au planning »', async () => {
+    const { user, store, repo } = await renderApp({ route: '/home' });
+    vi.spyOn(repo, 'setPlanEntry').mockRejectedValueOnce(new Error('Connexion réseau impossible'));
+    await user.click(screen.getByRole('link', { name: store.getState().recipes[0]!.name }));
+    await user.click(screen.getByRole('button', { name: 'Planifier' }));
+    await user.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: / · Midi/ })[0]!);
+    expect(await screen.findByText('Connexion réseau impossible')).toBeInTheDocument();
+    expect(screen.queryByText(/Ajouté au planning/)).not.toBeInTheDocument();
+    expect(store.getState().plan).toEqual({});
   });
 
   it('quitter le mode cuisine revient au détail ; Échap ferme la sheet', async () => {
@@ -204,18 +276,93 @@ describe('Détail, planification et cuisine', () => {
 });
 
 describe('Planning', () => {
-  it('choisir, changer puis retirer un repas', async () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('choisir, changer puis retirer un repas (jour passé compris)', async () => {
+    setToday(2026, 11, 20); // vendredi
     const { user, store } = await renderApp({ route: '/planning' });
-    await user.click(screen.getByRole('tab', { name: 'Lundi' }));
-    await user.click(screen.getByRole('button', { name: /Choisir le repas du Lundi midi/ }));
-    const sheet = screen.getByRole('dialog', { name: 'Lundi · Midi' });
+    const friday = screen.getByRole('tab', { name: 'Vendredi 20 novembre' });
+    expect(friday).toHaveAttribute('aria-selected', 'true');
+    expect(friday).toHaveAttribute('aria-current', 'date');
+    expect(screen.getByRole('heading', { name: 'Vendredi 20 novembre' })).toBeInTheDocument();
+
+    const monday = screen.getByRole('tab', { name: 'Lundi 16 novembre' });
+    expect(monday).toHaveAttribute('data-past');
+    expect(friday).not.toHaveAttribute('data-past');
+    await user.click(monday);
+    await user.click(screen.getByRole('button', { name: /Choisir le repas du Lundi 16 novembre midi/ }));
+    const sheet = screen.getByRole('dialog', { name: 'Lundi 16 nov. · Midi' });
     await user.click(within(sheet).getByRole('button', { name: /Mousse au chocolat/ }));
     expect(within(screen.getByTestId('slot-0')).getByText('Mousse au chocolat')).toBeInTheDocument();
-    expect(screen.getByText(/1 repas sur 14/)).toBeInTheDocument();
+    expect(screen.getByText('1 repas sur 14 cette semaine')).toBeInTheDocument();
+    expect(Object.keys(store.getState().plan)).toEqual(['2026-11-16:0']);
 
-    await user.click(screen.getByRole('button', { name: /Changer le repas du Lundi midi/ }));
+    await user.click(screen.getByRole('button', { name: /Changer le repas du Lundi 16 novembre midi/ }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Retirer ce repas' }));
     expect(store.getState().plan).toEqual({});
+  });
+
+  it('semaine suivante, horizon de 4 semaines, historique, retour à aujourd’hui', async () => {
+    setToday(2026, 11, 20); // vendredi
+    const { user, store } = await renderApp({ route: '/planning' });
+    const next = screen.getByRole('button', { name: 'Semaine suivante' });
+    const prev = screen.getByRole('button', { name: 'Semaine précédente' });
+    expect(screen.getByText('Semaine du 16 au 22 nov.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: "Aujourd'hui" })).not.toBeInTheDocument();
+
+    // Semaine prochaine : même jour de la semaine sélectionné.
+    await user.click(next);
+    expect(screen.getByText('Semaine du 23 au 29 nov.')).toBeInTheDocument();
+    expect(screen.getByText('0 repas sur 14 la semaine prochaine')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Vendredi 27 novembre' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('tab', { name: 'Vendredi 20 novembre' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Lundi 23 novembre' }));
+    await user.click(screen.getByRole('button', { name: /Choisir le repas du Lundi 23 novembre soir/ }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Lundi 23 nov. · Soir' })).getByRole('button', { name: /Mousse au chocolat/ }));
+    expect(store.getState().plan).toEqual({ [`2026-11-23:1`]: expect.any(String) });
+    expect(screen.getByText('1 repas sur 14 la semaine prochaine')).toBeInTheDocument();
+
+    // Horizon : 3 semaines après la semaine en cours.
+    await user.click(next);
+    await user.click(next);
+    expect(screen.getByText('Semaine du 7 au 13 déc.')).toBeInTheDocument();
+    expect(screen.getByText('0 repas sur 14 dans 3 semaines')).toBeInTheDocument();
+    expect(next).toHaveAttribute('aria-disabled', 'true');
+    await user.click(next);
+    expect(screen.getByText('Semaine du 7 au 13 déc.')).toBeInTheDocument();
+
+    // Retour à aujourd'hui.
+    await user.click(screen.getByRole('button', { name: "Aujourd'hui" }));
+    expect(screen.getByText('Semaine du 16 au 22 nov.')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Vendredi 20 novembre' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('0 repas sur 14 cette semaine')).toBeInTheDocument();
+
+    // Historique : semaines passées sans limite.
+    expect(prev).toHaveAttribute('aria-disabled', 'false');
+    await user.click(prev);
+    expect(screen.getByText('Semaine du 9 au 15 nov.')).toBeInTheDocument();
+    expect(screen.getByText('0 repas sur 14 la semaine dernière')).toBeInTheDocument();
+    await user.click(prev);
+    expect(screen.getByText('0 repas sur 14 il y a 2 semaines')).toBeInTheDocument();
+  });
+
+  it('accueil (semaine en cours) et profil (repas à venir) ne comptent que ce qui les concerne', async () => {
+    setToday(2026, 11, 20); // vendredi
+    const { store, unmount } = await renderApp({ route: '/home' });
+    const [a, b] = store.getState().recipes;
+    await act(async () => {
+      await store.getState().setPlanEntry('2026-11-16', 0, a!.id); // lundi passé, cette semaine
+      await store.getState().setPlanEntry('2026-11-20', 1, b!.id); // ce soir
+      await store.getState().setPlanEntry('2026-11-24', 0, a!.id); // semaine prochaine
+      await store.getState().setPlanEntry('2026-11-09', 0, a!.id); // semaine dernière
+    });
+    expect(screen.getByRole('link', { name: /repas planifiés/ })).toHaveTextContent('2/14');
+    unmount();
+
+    await renderApp({ route: '/profile' });
+    // Nouvelle instance : mêmes données locales (même utilisateur).
+    expect(screen.getByText('repas à venir').previousSibling).toHaveTextContent('2');
   });
 
   it('clic sur le fond ferme la sheet', async () => {
@@ -584,7 +731,7 @@ describe('Photos automatiques', () => {
     const again = await renderApp({ route: '/planning', images });
     const id = again.store.getState().recipes[0]!.id;
     // Le planning s'ouvre sur le jour courant.
-    await act(() => again.store.getState().setPlanEntry(weekdayIndex(), 1, id));
+    await act(() => again.store.getState().setPlanEntry(toIsoDate(), 1, id));
     await waitFor(() =>
       expect(screen.getByTestId('slot-1').querySelector('[data-photo] img')?.getAttribute('src')).toMatch(/^https:\/\/img\.test\//),
     );

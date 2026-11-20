@@ -764,9 +764,10 @@
 }
 
 /* ---------- Planning ---------- */
+/* 7 × 44 px + 6 × 6 px = 344 px : tient sans défilement dans 393 − 2 × 20 px (iPhone 15/16). */
 .days {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   overflow-x: auto;
 }
 .dayChip {
@@ -789,6 +790,26 @@
   background: var(--grad-brand);
   color: #fff;
   border-color: transparent;
+}
+.dayNum {
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1;
+}
+/* Jour passé : toujours modifiable (historique), simplement atténué. */
+.dayChip[data-past]:not(.dayChipOn) {
+  background: var(--gray-50);
+  color: var(--gray-600);
+}
+.dayChip[aria-current='date']:not(.dayChipOn) {
+  border-color: var(--red-500);
+  color: var(--red-600);
+}
+.planHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 .dayDot {
   width: 6px;

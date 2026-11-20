@@ -52,6 +52,9 @@ ou trouvée automatiquement par nom sur Marmiton, via la fonction d'import).
    existante, il ajoute les colonnes `recipes.image_url` (photos des recettes), `recipes.servings`
    (nombre de personnes) et `profiles.household` (taille du foyer). Sans elles, l'app fonctionne mais
    ces informations ne sont pas mémorisées (recettes comptées pour 4, foyer de 2).
+   Il crée aussi la table `planned_meals` (planning daté sur plusieurs semaines) et y déplace l'ancien
+   planning « semaine type » (`plan_entries`), qui devient la semaine en cours. Tant que ce n'est pas
+   fait, seule la semaine en cours est modifiable.
 3. **Authentication › URL Configuration** : *Site URL* = `https://<ton-user>.github.io/<repo>/`
    (et ajoute la même URL dans *Redirect URLs*).
 4. Optionnel : **Authentication › Providers › Email** : désactive « Confirm email » si tu veux

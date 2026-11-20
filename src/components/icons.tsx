@@ -27,6 +27,11 @@ export const ChevronLeft = (p: P) => (
     <path d="m15 18-6-6 6-6" />
   </Svg>
 );
+export const ChevronRight = (p: P) => (
+  <Svg strokeWidth={2.2} {...p}>
+    <path d="m9 18 6-6-6-6" />
+  </Svg>
+);
 export const Close = (p: P) => (
   <Svg strokeWidth={2.2} {...p}>
     <path d="M18 6 6 18M6 6l12 12" />

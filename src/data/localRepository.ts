@@ -1,5 +1,6 @@
 import { SEED_FRIDGE, SEED_RECIPES } from '../domain/seed';
-import { planKey, withoutRecipes } from '../domain/logic';
+import { toIsoDate, weekStart, type IsoDate } from '../domain/calendar';
+import { datedPlan, planKey, withoutRecipes } from '../domain/logic';
 import { clampServings, DEFAULT_HOUSEHOLD, DEFAULT_SERVINGS } from '../domain/servings';
 import type { FoodCategory, FridgeItem, Profile, Recipe, RecipeDraft, User, UserData } from '../domain/types';
 import { RepositoryError, type Repository } from './repository';
@@ -47,6 +48,8 @@ function upgrade(d: UserData): UserData {
     ...d,
     profile: { ...d.profile, household: clampServings(d.profile?.household) ?? DEFAULT_HOUSEHOLD },
     recipes: (d.recipes ?? []).map((r) => ({ ...r, servings: clampServings(r.servings) ?? DEFAULT_SERVINGS })),
+    // Ancienne « semaine type » (`jour-repas`) : devient la semaine en cours.
+    plan: datedPlan(d.plan ?? {}, weekStart(toIsoDate())),
   };
 }
 
@@ -197,10 +200,10 @@ export class LocalRepository implements Repository {
     });
   }
 
-  async setPlanEntry(user: User, day: number, meal: number, recipeId: string | null): Promise<void> {
+  async setPlanEntry(user: User, date: IsoDate, meal: number, recipeId: string | null): Promise<void> {
     await this.tick();
     this.mutate(user, (d) => {
-      const k = planKey(day, meal);
+      const k = planKey(date, meal);
       if (recipeId) d.plan[k] = recipeId;
       else delete d.plan[k];
     });

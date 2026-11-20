@@ -5,6 +5,7 @@ import { RecipeImage } from '../components/RecipeImage';
 import { BottomSheet } from '../components/Shell';
 import { useLongPress } from '../components/hooks';
 import { Check, Close, Heart, Pencil, Search, Trash } from '../components/icons';
+import { toIsoDate, weekDates, weekStart } from '../domain/calendar';
 import {
   badgeTone,
   filterRecipes,
@@ -44,7 +45,8 @@ export default function Home() {
 
   const best = useMemo(() => rankBySuggestion(recipes, fridge)[0], [recipes, fridge]);
   const shown = useMemo(() => filterRecipes(recipes, { category: cat, query, favorites }), [recipes, cat, query, favorites]);
-  const planned = plannedCount(plan, new Set(recipes.map((r) => r.id)));
+  // Semaine en cours : la carte ouvre le planning sur aujourd'hui.
+  const planned = plannedCount(plan, weekDates(weekStart(toIsoDate())), new Set(recipes.map((r) => r.id)));
   const firstName = profile.name.split(' ')[0] || 'chef';
   const single = selected.length === 1 ? recipes.find((r) => r.id === selected[0]) : undefined;
   const inPlan = Object.values(plan).some((id) => selected.includes(id));

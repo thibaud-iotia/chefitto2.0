@@ -1,6 +1,7 @@
 import type { SupabaseClient, User as SbUser } from '@supabase/supabase-js';
 import { safeImageUrl } from '../domain/images';
-import { planKey } from '../domain/logic';
+import { daysBetween, toIsoDate, weekStart, type IsoDate } from '../domain/calendar';
+import { datedPlan, planKey } from '../domain/logic';
 import { clampServings, DEFAULT_HOUSEHOLD, DEFAULT_SERVINGS } from '../domain/servings';
 import { SEED_FRIDGE, SEED_RECIPES } from '../domain/seed';
 import type {
@@ -113,6 +114,20 @@ async function withOptionalColumns<T extends Record<string, unknown>, R extends 
   return res;
 }
 
+/** Table du planning daté. Absente tant que `schema.sql` n'a pas été ré-exécuté (base créée avant le planning sur plusieurs semaines). */
+const PLAN_TABLE = 'planned_meals';
+/** Ancienne « semaine type » (jour 0-6, sans date), lue et écrite tant que `PLAN_TABLE` n'existe pas. */
+const LEGACY_PLAN_TABLE = 'plan_entries';
+export const LEGACY_PLAN_MESSAGE = 'Mettez à jour la base (supabase/schema.sql) pour planifier au-delà de cette semaine';
+
+/** Table inconnue de PostgREST (`PGRST205`, « Could not find the table ») ou de Postgres (`42P01`, « does not exist »). */
+function isMissingTable(e: { message: string; code?: string } | null, table: string): boolean {
+  if (!e) return false;
+  if (e.code === 'PGRST205' || e.code === '42P01') return true;
+  const m = e.message.toLowerCase();
+  return m.includes(table) && (m.includes('could not find the table') || m.includes('does not exist'));
+}
+
 const toUser = (u: SbUser): User => ({ id: u.id, email: u.email ?? '' });
 
 function check<D>(res: { data?: D | null; error: { message: string } | null }): D {
@@ -122,6 +137,9 @@ function check<D>(res: { data?: D | null; error: { message: string } | null }): 
 
 export class SupabaseRepository implements Repository {
   readonly mode = 'supabase' as const;
+
+  /** `true` si la base n'a pas encore la table du planning daté : on retombe sur la semaine type (semaine en cours seulement). */
+  private legacyPlan = false;
 
   constructor(private readonly sb: SupabaseClient) {}
 
@@ -194,17 +212,30 @@ export class SupabaseRepository implements Repository {
       this.sb.from('recipes').select('*').order('created_at', { ascending: false }),
       this.sb.from('favorites').select('recipe_id'),
       this.sb.from('fridge_items').select('id,name,category').order('created_at', { ascending: false }),
-      this.sb.from('plan_entries').select('day,meal,recipe_id'),
+      this.loadPlan(),
     ]);
-    const planMap: Plan = {};
-    for (const p of check(plan) as { day: number; meal: number; recipe_id: string }[]) planMap[planKey(p.day, p.meal)] = p.recipe_id;
     return {
       profile,
       recipes: (check(recipes) as RecipeRow[]).map(toRecipe),
       favorites: (check(favorites) as { recipe_id: string }[]).map((f) => f.recipe_id),
       fridge: check(fridge) as FridgeItem[],
-      plan: planMap,
+      plan,
     };
+  }
+
+  private async loadPlan(): Promise<Plan> {
+    const res = await this.sb.from(PLAN_TABLE).select('meal_date,meal,recipe_id');
+    this.legacyPlan = isMissingTable(res.error, PLAN_TABLE);
+    if (!this.legacyPlan) {
+      const plan: Plan = {};
+      for (const p of check(res) as { meal_date: IsoDate; meal: number; recipe_id: string }[]) plan[planKey(p.meal_date, p.meal)] = p.recipe_id;
+      return plan;
+    }
+    // Front déployé avant la migration SQL : la semaine type est affichée comme la semaine en cours.
+    const legacy: Record<string, string> = {};
+    for (const p of check(await this.sb.from(LEGACY_PLAN_TABLE).select('day,meal,recipe_id')) as { day: number; meal: number; recipe_id: string }[])
+      legacy[`${p.day}-${p.meal}`] = p.recipe_id;
+    return datedPlan(legacy, weekStart(toIsoDate()));
   }
 
   async updateProfile(user: User, profile: Profile): Promise<void> {
@@ -261,8 +292,17 @@ export class SupabaseRepository implements Repository {
     check(await this.sb.from('fridge_items').delete().eq('id', id));
   }
 
-  async setPlanEntry(user: User, day: number, meal: number, recipeId: string | null): Promise<void> {
-    if (recipeId) check(await this.sb.from('plan_entries').upsert({ user_id: user.id, day, meal, recipe_id: recipeId }));
-    else check(await this.sb.from('plan_entries').delete().eq('user_id', user.id).eq('day', day).eq('meal', meal));
+  async setPlanEntry(user: User, date: IsoDate, meal: number, recipeId: string | null): Promise<void> {
+    if (this.legacyPlan) return this.setLegacyPlanEntry(user, date, meal, recipeId);
+    if (recipeId) check(await this.sb.from(PLAN_TABLE).upsert({ user_id: user.id, meal_date: date, meal, recipe_id: recipeId }));
+    else check(await this.sb.from(PLAN_TABLE).delete().eq('user_id', user.id).eq('meal_date', date).eq('meal', meal));
+  }
+
+  /** Base non migrée : seule la semaine en cours existe (jour 0 = lundi). */
+  private async setLegacyPlanEntry(user: User, date: IsoDate, meal: number, recipeId: string | null): Promise<void> {
+    const day = daysBetween(weekStart(toIsoDate()), date);
+    if (day < 0 || day > 6) throw new RepositoryError(LEGACY_PLAN_MESSAGE);
+    if (recipeId) check(await this.sb.from(LEGACY_PLAN_TABLE).upsert({ user_id: user.id, day, meal, recipe_id: recipeId }));
+    else check(await this.sb.from(LEGACY_PLAN_TABLE).delete().eq('user_id', user.id).eq('day', day).eq('meal', meal));
   }
 }

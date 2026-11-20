@@ -1,15 +1,22 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page } from '@playwright/test';
-import { PHOTO_ORIGIN, expect, photoUrl, test } from './fixtures';
+import { PHOTO_ORIGIN, expect, login, photoUrl, test } from './fixtures';
 
-test('parcours complet : recette → planning → mode cuisine', async ({ loggedIn: page }) => {
+/** Fige la date du jour (l'horloge continue d'avancer : minuteries et animations normales). À appeler avant `login`. */
+async function setToday(page: Page, isoDate: string) {
+  await page.clock.install({ time: new Date(`${isoDate}T10:00:00`) });
+}
+
+test('parcours complet : recette → planning → mode cuisine', async ({ page }) => {
+  await setToday(page, '2026-11-16'); // lundi : toute la semaine est planifiable
+  await login(page);
   await page.getByRole('link', { name: 'Veggie tomato mix' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Veggie tomato mix' })).toBeVisible();
   await expect(page.getByText('4/5 au frigo')).toBeVisible();
 
   await page.getByRole('button', { name: 'Planifier' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: /Mercredi · Midi/ }).click();
-  await expect(page.getByText('Ajouté au planning')).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: /Mercredi 18 · Midi/ }).click();
+  await expect(page.getByText('Ajouté au planning · mercredi 18 nov. midi')).toBeVisible();
 
   await page.getByRole('button', { name: 'Commencer à cuisiner' }).click();
   for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Étape suivante' }).click();
@@ -17,9 +24,76 @@ test('parcours complet : recette → planning → mode cuisine', async ({ logged
   await expect(page.getByText('Bon appétit !')).toBeVisible();
 
   await page.getByRole('link', { name: 'Planning', exact: true }).click();
-  await page.getByRole('tab', { name: 'Mercredi' }).click();
+  await page.getByRole('tab', { name: 'Mercredi 18 novembre' }).click();
   await expect(page.getByTestId('slot-0')).toContainText('Veggie tomato mix');
-  await expect(page.getByText('1 repas sur 14')).toBeVisible();
+  await expect(page.getByText('1 repas sur 14 cette semaine')).toBeVisible();
+});
+
+test('planning sur 4 semaines : semaine prochaine, persistance, horizon, mise en page iPhone, axe', async ({ page }) => {
+  await setToday(page, '2026-11-20'); // vendredi
+  await login(page);
+  await page.setViewportSize({ width: 393, height: 852 }); // iPhone 16
+  const axe = async () => {
+    const res = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+    expect(res.violations, JSON.stringify(res.violations.map((v) => [v.id, v.nodes.map((n) => n.target)]), null, 2)).toEqual([]);
+  };
+
+  await page.getByRole('link', { name: 'Planning', exact: true }).click();
+  const next = page.getByRole('button', { name: 'Semaine suivante' });
+  await expect(page.getByText('Semaine du 16 au 22 nov.')).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Vendredi 20 novembre' })).toHaveAttribute('aria-current', 'date');
+
+  // Les 7 jours tiennent sur la largeur de l'écran, sans défilement horizontal.
+  const main = page.getByRole('main');
+  expect(await main.evaluate((el) => el.scrollWidth - el.clientWidth)).toBe(0);
+  const sunday = (await page.getByRole('tab', { name: 'Dimanche 22 novembre' }).boundingBox())!;
+  expect(sunday.x + sunday.width).toBeLessThanOrEqual(393 - 16);
+  await axe(); // jours passés atténués, aujourd'hui marqué
+
+  // Semaine prochaine : lundi 23 au soir.
+  await next.click();
+  await expect(page.getByText('Semaine du 23 au 29 nov.')).toBeVisible();
+  await page.getByRole('tab', { name: 'Lundi 23 novembre' }).click();
+  await page.getByRole('button', { name: 'Choisir le repas du Lundi 23 novembre soir' }).click();
+  await page.getByRole('dialog', { name: 'Lundi 23 nov. · Soir' }).getByRole('button', { name: /Mousse au chocolat/ }).click();
+  await expect(page.getByTestId('slot-1')).toContainText('Mousse au chocolat');
+  await expect(page.getByText('1 repas sur 14 la semaine prochaine')).toBeVisible();
+  await axe();
+
+  // Persisté : après rechargement, le planning rouvre sur aujourd'hui et la semaine prochaine est intacte.
+  await page.reload();
+  await expect(page.getByText('Semaine du 16 au 22 nov.')).toBeVisible();
+  await expect(page.getByText('0 repas sur 14 cette semaine')).toBeVisible();
+  await next.click();
+  await page.getByRole('tab', { name: 'Lundi 23 novembre' }).click();
+  await expect(page.getByTestId('slot-1')).toContainText('Mousse au chocolat');
+
+  // Horizon : 3 semaines après la semaine en cours, puis retour à aujourd'hui.
+  await next.click();
+  await next.click();
+  await expect(page.getByText('Semaine du 7 au 13 déc.')).toBeVisible();
+  await expect(next).toHaveAttribute('aria-disabled', 'true');
+  await page.getByRole('button', { name: "Aujourd'hui" }).click();
+  await expect(page.getByRole('tab', { name: 'Vendredi 20 novembre' })).toHaveAttribute('aria-selected', 'true');
+
+  // Depuis la fiche : « Planifier » dans 3 semaines.
+  await page.getByRole('link', { name: 'Accueil', exact: true }).click();
+  await page.getByRole('link', { name: 'Veggie tomato mix' }).click();
+  await page.getByRole('button', { name: 'Planifier' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Planifier Veggie tomato mix' });
+  await expect(sheet.getByRole('button', { name: /Jeudi 19 · Midi/ })).toHaveCount(0); // passé : non proposé
+  await expect(sheet.getByRole('button', { name: /Vendredi 20 · Soir/ })).toBeVisible();
+  await axe();
+  for (let i = 0; i < 3; i++) await sheet.getByRole('button', { name: 'Semaine suivante' }).click();
+  await expect(sheet.getByText('Semaine du 7 au 13 déc.')).toBeVisible();
+  await sheet.getByRole('button', { name: /Dimanche 13 · Midi/ }).click();
+  await expect(page.getByText('Ajouté au planning · dimanche 13 déc. midi')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Retour' }).click();
+  await page.getByRole('link', { name: 'Planning', exact: true }).click();
+  for (let i = 0; i < 3; i++) await next.click();
+  await page.getByRole('tab', { name: 'Dimanche 13 décembre' }).click();
+  await expect(page.getByTestId('slot-0')).toContainText('Veggie tomato mix');
 });
 
 test('le frigo pilote les suggestions et persiste après rechargement', async ({ loggedIn: page }) => {

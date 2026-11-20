@@ -1,9 +1,11 @@
-import { useCallback } from 'react';
+import { useCallback, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { BottomNav, BottomSheet, Frame, Loader, Toast, type SheetItem } from './components/Shell';
+import { WeekNav } from './components/WeekNav';
+import { formatDayMedium, formatDayShort, lastPlannableWeek, toIsoDate, weekDates, weekStart, type IsoDate } from './domain/calendar';
 import { matchPct, planKey } from './domain/logic';
-import { DAYS, MEALS } from './domain/types';
+import { MEALS } from './domain/types';
 import { useApp } from './store/storeContext';
 import { Button } from './ui';
 import AddRecipe from './screens/AddRecipe';
@@ -87,13 +89,14 @@ export default function App({ demo = false }: { demo?: boolean }) {
 
 /** Bottom sheet partagé : choix d'un plat pour un créneau, ou d'un créneau pour un plat. */
 function SheetHost() {
-  const { sheet, recipes, fridge, plan, closeSheet, setPlanEntry, flash } = useApp(
+  const { sheet, recipes, fridge, plan, closeSheet, openSheet, setPlanEntry, flash } = useApp(
     useShallow((st) => ({
       sheet: st.sheet,
       recipes: st.recipes,
       fridge: st.fridge,
       plan: st.plan,
       closeSheet: st.closeSheet,
+      openSheet: st.openSheet,
       setPlanEntry: st.setPlanEntry,
       flash: st.flash,
     })),
@@ -102,39 +105,49 @@ function SheetHost() {
 
   let title = '';
   let items: SheetItem[] = [];
+  let header: ReactNode = null;
 
   if (sheet?.type === 'pick') {
-    const { day, meal } = sheet;
-    const sel = plan[planKey(day, meal)];
-    title = `${DAYS[day]} · ${MEALS[meal]}`;
+    const { date, meal } = sheet;
+    const sel = plan[planKey(date, meal)];
+    title = `${formatDayMedium(date)} · ${MEALS[meal]}`;
     items = recipes.map((d) => ({
       key: d.id,
       label: d.name,
       sub: `${matchPct(d, fridge)}% frigo`,
       selected: sel === d.id,
-      onPick: () => void setPlanEntry(day, meal, d.id),
+      onPick: () => void setPlanEntry(date, meal, d.id),
     }));
-    if (sel) items.push({ key: 'remove', label: 'Retirer ce repas', onPick: () => void setPlanEntry(day, meal, null) });
+    if (sel) items.push({ key: 'remove', label: 'Retirer ce repas', onPick: () => void setPlanEntry(date, meal, null) });
   }
 
   if (sheet?.type === 'plan') {
-    const recipe = recipes.find((r) => r.id === sheet.recipeId);
+    const { recipeId } = sheet;
+    const recipe = recipes.find((r) => r.id === recipeId);
+    const today = toIsoDate();
+    const first = weekStart(today);
+    const last = lastPlannableWeek(today);
+    const week: IsoDate = sheet.week && sheet.week >= first && sheet.week <= last ? sheet.week : first;
     title = `Planifier ${recipe?.name ?? ''}`;
-    DAYS.forEach((dayName, day) =>
+    header = <WeekNav week={week} min={first} max={last} onChange={(w) => openSheet({ type: 'plan', recipeId, week: w })} />;
+    // Pas de créneau dans le passé : on planifie à partir d'aujourd'hui.
+    for (const date of weekDates(week).filter((d) => d >= today))
       MEALS.forEach((mealName, meal) => {
-        const taken = !!plan[planKey(day, meal)];
+        const current = plan[planKey(date, meal)];
         items.push({
-          key: `${day}-${meal}`,
-          label: `${dayName} · ${mealName}`,
-          sub: taken ? 'occupé' : 'libre',
-          subColor: taken ? '#8a5300' : 'var(--green-600)',
+          key: planKey(date, meal),
+          label: `${formatDayShort(date)} · ${mealName}`,
+          sub: current === recipeId ? 'déjà prévu' : current ? 'occupé' : 'libre',
+          subColor: current && current !== recipeId ? '#8a5300' : 'var(--green-600)',
+          selected: current === recipeId,
           onPick: () => {
-            void setPlanEntry(day, meal, sheet.recipeId).then(() => flash('Ajouté au planning'));
+            void setPlanEntry(date, meal, recipeId).then(
+              (ok) => ok && flash(`Ajouté au planning · ${formatDayMedium(date).toLowerCase()} ${mealName.toLowerCase()}`),
+            );
           },
         });
-      }),
-    );
+      });
   }
 
-  return <BottomSheet open={!!sheet} title={title} items={items} onClose={onClose} />;
+  return <BottomSheet open={!!sheet} title={title} header={header} items={items} onClose={onClose} />;
 }

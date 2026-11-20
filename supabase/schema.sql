@@ -76,7 +76,19 @@ create table if not exists public.fridge_items (
 );
 create index if not exists fridge_user_idx on public.fridge_items (user_id, created_at desc);
 
--- Planning (7 jours × midi/soir) ----------------------------------------
+-- Planning daté (midi / soir), sur plusieurs semaines --------------------
+create table if not exists public.planned_meals (
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  meal_date date not null,
+  meal smallint not null check (meal between 0 and 1),
+  recipe_id uuid not null references public.recipes (id) on delete cascade,
+  primary key (user_id, meal_date, meal)
+);
+-- Suppression d'une recette : la cascade retrouve ses repas sans parcourir tout le planning.
+create index if not exists planned_meals_recipe_idx on public.planned_meals (recipe_id);
+
+-- Ancien planning « semaine type » (jour 0 = lundi, sans date). Gardé pour les anciennes versions de l'app
+-- encore en cache ; son contenu est déplacé dans planned_meals par la migration en fin de fichier.
 create table if not exists public.plan_entries (
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   day smallint not null check (day between 0 and 6),
@@ -91,6 +103,7 @@ alter table public.recipes enable row level security;
 alter table public.favorites enable row level security;
 alter table public.fridge_items enable row level security;
 alter table public.plan_entries enable row level security;
+alter table public.planned_meals enable row level security;
 
 drop policy if exists "own profile" on public.profiles;
 create policy "own profile" on public.profiles
@@ -111,3 +124,17 @@ create policy "own fridge" on public.fridge_items
 drop policy if exists "own plan" on public.plan_entries;
 create policy "own plan" on public.plan_entries
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "own planned meals" on public.planned_meals;
+create policy "own planned meals" on public.planned_meals
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Migration (bases créées avant le planning daté) : la semaine type devient la semaine en cours
+-- (heure de Paris), puis l'ancienne table est vidée. Ré-exécuter le fichier ne déplace donc rien deux fois.
+with moved as (
+  delete from public.plan_entries returning user_id, day, meal, recipe_id
+)
+insert into public.planned_meals (user_id, meal_date, meal, recipe_id)
+select user_id, date_trunc('week', now() at time zone 'Europe/Paris')::date + day, meal, recipe_id
+from moved
+on conflict (user_id, meal_date, meal) do nothing;

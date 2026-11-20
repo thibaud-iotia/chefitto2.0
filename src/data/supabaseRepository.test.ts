@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { SupabaseRepository, toRecipe, toRecipeRow } from './supabaseRepository';
+import { LEGACY_PLAN_MESSAGE, SupabaseRepository, toRecipe, toRecipeRow } from './supabaseRepository';
 import { friendlyAuthError } from './repository';
 import { SEED_RECIPES } from '../domain/seed';
 import type { FridgeItem } from '../domain/types';
@@ -9,7 +9,7 @@ import type { FridgeItem } from '../domain/types';
  * Faux client Supabase : chaque appel `from(table)` renvoie un builder chaînable
  * qui enregistre les opérations et se résout avec la réponse programmée pour la table.
  */
-type Resp = { data: unknown; error: { message: string } | null };
+type Resp = { data: unknown; error: { message: string; code?: string } | null };
 function fakeClient(responses: Record<string, Resp[]>, auth: Partial<Record<string, unknown>> = {}) {
   const calls: { table: string; ops: [string, unknown[]][] }[] = [];
   const from = (table: string) => {
@@ -146,13 +146,14 @@ describe('SupabaseRepository — données', () => {
         { data: [{ id: 'f1', name: 'Tomate', category: 'Légume' }], error: null },
       ],
       favorites: [{ data: [{ recipe_id: 'r1' }], error: null }],
-      plan_entries: [{ data: [{ day: 1, meal: 0, recipe_id: 'r1' }], error: null }],
+      planned_meals: [{ data: [{ meal_date: '2026-11-23', meal: 0, recipe_id: 'r1' }], error: null }],
     });
     const data = await new SupabaseRepository(client).loadAll(user);
     expect(data.profile).toEqual({ name: 'Toto', email: 'toto@cuisine.fr', household: 2 }); // colonne absente : défaut
     expect(data.recipes[0]!.id).toBe('r1');
     expect(data.favorites).toEqual(['r1']);
-    expect(data.plan).toEqual({ '1-0': 'r1' });
+    expect(data.plan).toEqual({ '2026-11-23:0': 'r1' });
+    expect(calls.some((c) => c.table === 'plan_entries')).toBe(false); // ancienne table ignorée
     const seedInsert = calls.find((c) => c.table === 'recipes' && c.ops[0]![0] === 'insert');
     expect((seedInsert!.ops[0]![1][0] as unknown[]).length).toBe(SEED_RECIPES.length);
   });
@@ -167,7 +168,7 @@ describe('SupabaseRepository — données', () => {
       recipes: [{ data: [], error: null }],
       fridge_items: [{ data: [], error: null }],
       favorites: [{ data: [], error: null }],
-      plan_entries: [{ data: [], error: null }],
+      planned_meals: [{ data: [], error: null }],
     });
     const data = await new SupabaseRepository(client).loadAll(user);
     expect(data.profile.name).toBe('toto');
@@ -198,8 +199,8 @@ describe('SupabaseRepository — données', () => {
     await repo.setFavorite(user, 'r1', false);
     expect((await repo.addFridgeItem(user, 'Kiwi', 'Fruit')).id).toBe('f9');
     await repo.removeFridgeItem(user, 'f9');
-    await repo.setPlanEntry(user, 0, 1, 'r1');
-    await repo.setPlanEntry(user, 0, 1, null);
+    await repo.setPlanEntry(user, '2026-12-07', 1, 'r1');
+    await repo.setPlanEntry(user, '2026-12-07', 1, null);
     await repo.updateProfile(user, { name: 'T', email: 'e', household: 3 });
     const ops = calls.map((c) => `${c.table}:${c.ops[0]![0]}`);
     expect(ops).toEqual([
@@ -208,9 +209,17 @@ describe('SupabaseRepository — données', () => {
       'favorites:delete',
       'fridge_items:insert',
       'fridge_items:delete',
-      'plan_entries:upsert',
-      'plan_entries:delete',
+      'planned_meals:upsert',
+      'planned_meals:delete',
       'profiles:update',
+    ]);
+    const plans = calls.filter((c) => c.table === 'planned_meals');
+    expect(plans[0]!.ops).toEqual([['upsert', [{ user_id: 'u1', meal_date: '2026-12-07', meal: 1, recipe_id: 'r1' }]]]);
+    expect(plans[1]!.ops).toEqual([
+      ['delete', []],
+      ['eq', ['user_id', 'u1']],
+      ['eq', ['meal_date', '2026-12-07']],
+      ['eq', ['meal', 1]],
     ]);
   });
 
@@ -306,7 +315,7 @@ describe('SupabaseRepository — données', () => {
       recipes: [{ data: [{ ...row, servings: 6 }], error: null }],
       fridge_items: [{ data: [], error: null }],
       favorites: [{ data: [], error: null }],
-      plan_entries: [{ data: [], error: null }],
+      planned_meals: [{ data: [], error: null }],
     });
     const repo = new SupabaseRepository(client);
     const data = await repo.loadAll(user);
@@ -351,7 +360,7 @@ describe('SupabaseRepository — données', () => {
       ],
       fridge_items: [{ data: [], error: null }],
       favorites: [{ data: [], error: null }],
-      plan_entries: [{ data: [], error: null }],
+      planned_meals: [{ data: [], error: null }],
     });
     await new SupabaseRepository(client).loadAll(user);
     const inserts = calls.filter((c) => c.table === 'recipes' && c.ops[0]![0] === 'insert').map((c) => c.ops[0]![1][0] as object[]);
@@ -372,5 +381,57 @@ describe('SupabaseRepository — données', () => {
   it('propage les erreurs de base', async () => {
     const { client } = fakeClient({ fridge_items: [{ data: null, error: { message: 'Failed to fetch' } }] });
     await expect(new SupabaseRepository(client).removeFridgeItem(user, 'x')).rejects.toThrow('Connexion réseau impossible');
+  });
+
+  describe('planning sur une base pas encore migrée (table planned_meals absente)', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const base = (planned: Resp, legacy: Resp[] = [{ data: [{ day: 1, meal: 0, recipe_id: 'r1' }], error: null }]) => ({
+      profiles: [
+        { data: { name: 'Toto', email: 'toto@cuisine.fr' }, error: null },
+        { data: [], error: null },
+      ],
+      recipes: [{ data: [], error: null }],
+      fridge_items: [{ data: [], error: null }],
+      favorites: [{ data: [], error: null }],
+      planned_meals: [planned],
+      plan_entries: legacy,
+    });
+
+    it('lit la semaine type comme la semaine en cours, écrit dans l’ancienne table, refuse les autres semaines', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(2026, 10, 20, 12)); // vendredi 20 nov. 2026
+      const missing = { data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.planned_meals' in the schema cache" } };
+      const { client, calls } = fakeClient(base(missing));
+      const repo = new SupabaseRepository(client);
+      expect((await repo.loadAll(user)).plan).toEqual({ '2026-11-17:0': 'r1' }); // jour 1 = mardi
+
+      await repo.setPlanEntry(user, '2026-11-22', 1, 'r2'); // dimanche : jour 6
+      await repo.setPlanEntry(user, '2026-11-16', 0, null); // lundi : jour 0
+      const legacy = calls.filter((c) => c.table === 'plan_entries').slice(1);
+      expect(legacy[0]!.ops).toEqual([['upsert', [{ user_id: 'u1', day: 6, meal: 1, recipe_id: 'r2' }]]]);
+      expect(legacy[1]!.ops.slice(1)).toEqual([
+        ['eq', ['user_id', 'u1']],
+        ['eq', ['day', 0]],
+        ['eq', ['meal', 0]],
+      ]);
+      await expect(repo.setPlanEntry(user, '2026-11-23', 0, 'r1')).rejects.toThrow(LEGACY_PLAN_MESSAGE);
+      await expect(repo.setPlanEntry(user, '2026-11-15', 0, 'r1')).rejects.toThrow(LEGACY_PLAN_MESSAGE);
+      expect(calls.filter((c) => c.table === 'planned_meals')).toHaveLength(1);
+    });
+
+    it('reconnaît aussi l’erreur Postgres « does not exist » (sans code)', async () => {
+      const missing = { data: null, error: { message: 'relation "public.planned_meals" does not exist' } };
+      const { client } = fakeClient(base(missing, [{ data: [], error: null }]));
+      expect((await new SupabaseRepository(client).loadAll(user)).plan).toEqual({});
+    });
+
+    it('une autre erreur sur la table du planning reste une vraie erreur', async () => {
+      const { client, calls } = fakeClient(base({ data: null, error: { message: 'permission denied for table planned_meals' } }));
+      await expect(new SupabaseRepository(client).loadAll(user)).rejects.toThrow('permission denied');
+      expect(calls.some((c) => c.table === 'plan_entries')).toBe(false);
+    });
   });
 });

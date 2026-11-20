@@ -70,7 +70,20 @@ export interface SheetItem {
   onPick: () => void;
 }
 
-export function BottomSheet({ open, title, items, onClose }: { open: boolean; title: string; items: SheetItem[]; onClose: () => void }) {
+export function BottomSheet({
+  open,
+  title,
+  items,
+  onClose,
+  header,
+}: {
+  open: boolean;
+  title: string;
+  items: SheetItem[];
+  onClose: () => void;
+  /** Contenu fixe entre le titre et la liste (ex. choix de la semaine). */
+  header?: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -102,6 +115,7 @@ export function BottomSheet({ open, title, items, onClose }: { open: boolean; ti
       >
         <div className={s.grabber} />
         <h2 className={s.sheetTitle}>{title}</h2>
+        {header}
         <div className={s.sheetList}>
           {items.map((o) => (
             <button key={o.key} type="button" className={`${s.sheetItem} ${o.selected ? s.sheetItemOn : ''}`} onClick={o.onPick}>
